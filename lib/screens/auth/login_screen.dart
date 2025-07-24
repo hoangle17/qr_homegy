@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final void Function(int userId) onLoginSuccess;
@@ -17,9 +19,11 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  Future<void> _saveToken(String token) async {
+  Future<void> _saveUserInfo(Map<String, dynamic> loginResponse) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', token);
+    await prefs.setString('auth_token', loginResponse['token']);
+    await prefs.setString('user_email', loginResponse['user']['email']);
+    await prefs.setString('user_info', jsonEncode(loginResponse['user']));
   }
 
   void _login() async {
@@ -29,14 +33,23 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
       _isLoading = true;
     });
-    final token = await ApiService.login(email, pass);
-    setState(() { _isLoading = false; });
-    if (token != null) {
-      await _saveToken(token);
-      widget.onLoginSuccess(0); // hoặc truyền userId nếu backend trả về
-    } else {
-      setState(() {
-        _error = 'Sai email hoặc mật khẩu, hoặc lỗi server!';
+    
+    try {
+      final loginResponse = await ApiService.login(email, pass);
+      setState(() { _isLoading = false; });
+      
+      if (loginResponse != null) {
+        await _saveUserInfo(loginResponse);
+        widget.onLoginSuccess(0);
+      } else {
+        setState(() {
+          _error = 'Sai email hoặc mật khẩu, hoặc lỗi server!';
+        });
+      }
+    } catch (e) {
+      setState(() { 
+        _isLoading = false;
+        _error = 'Lỗi kết nối: $e';
       });
     }
   }
@@ -107,7 +120,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+                        );
+                      },
                       child: const Text('Quên mật khẩu?'),
                     ),
                   ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'services/api_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -27,9 +28,36 @@ class _MyAppState extends State<MyApp> {
   Future<void> _checkToken() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
-    setState(() {
-      _isLoggedIn = token != null;
-    });
+    
+    if (token != null) {
+      // Nếu có token, gọi API để lấy thông tin profile mới nhất
+      try {
+        final userProfile = await ApiService.getCurrentUserProfile();
+        if (userProfile != null) {
+          // Cập nhật thông tin user thành công
+          setState(() {
+            _isLoggedIn = true;
+          });
+        } else {
+          // Token không hợp lệ hoặc API lỗi, xóa token
+          await prefs.remove('auth_token');
+          await prefs.remove('user_info');
+          await prefs.remove('user_email');
+          setState(() {
+            _isLoggedIn = false;
+          });
+        }
+      } catch (e) {
+        // Lỗi kết nối, vẫn cho phép đăng nhập với thông tin cũ
+        setState(() {
+          _isLoggedIn = true;
+        });
+      }
+    } else {
+      setState(() {
+        _isLoggedIn = false;
+      });
+    }
   }
 
   void _onLoginSuccess(int userId) {

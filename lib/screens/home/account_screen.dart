@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../auth/change_password_screen.dart';
+import '../../services/api_service.dart';
 
 class AccountScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -13,7 +14,10 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   String? email;
+  String? name;
   String? role;
+  String? phone;
+  String? address;
   bool _loading = true;
 
   @override
@@ -23,24 +27,35 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _loadUserInfo() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-    if (token != null) {
-      try {
-        final parts = token.split('.');
-        if (parts.length == 3) {
-          final payload = utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
-          final data = jsonDecode(payload);
+    try {
+      // Sử dụng API profile mới để lấy thông tin user
+      final user = await ApiService.getCurrentUserProfile();
+      if (user != null) {
+        setState(() {
+          email = user.email;
+          name = user.name;
+          role = user.role;
+          phone = user.phone;
+          address = user.address;
+          _loading = false;
+        });
+      } else {
+        // Fallback to old method if API fails
+        final userData = await ApiService.getCurrentUser();
+        if (userData != null) {
           setState(() {
-            email = data['email']?.toString();
-            role = data['role']?.toString();
+            email = userData['email']?.toString();
+            name = userData['name']?.toString();
+            role = userData['role']?.toString();
+            phone = userData['phone']?.toString();
+            address = userData['address']?.toString();
             _loading = false;
           });
+        } else {
+          setState(() { _loading = false; });
         }
-      } catch (_) {
-        setState(() { _loading = false; });
       }
-    } else {
+    } catch (e) {
       setState(() { _loading = false; });
     }
   }
@@ -71,8 +86,12 @@ class _AccountScreenState extends State<AccountScreen> {
       ),
     );
     if (confirm != true) return;
+    
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
+    await prefs.remove('user_email');
+    await prefs.remove('user_info');
+    
     if (mounted) {
       widget.onLogout();
     }
@@ -81,31 +100,237 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+        ),
+      );
     }
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Tài khoản'),
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            // Profile Card
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    // Avatar and Name
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: Colors.deepPurple.withOpacity(0.1),
+                      child: Icon(
+                        Icons.person,
+                        size: 30,
+                        color: Colors.deepPurple,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      name ?? 'Chưa có tên',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _getRoleColor(role ?? '').withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: _getRoleColor(role ?? '')),
+                      ),
+                      child: Text(
+                        _getRoleDisplayName(role ?? ''),
+                        style: TextStyle(
+                          color: _getRoleColor(role ?? ''),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Information Card
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Thông tin chi tiết',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInfoRow(Icons.email, 'Email', email ?? 'Chưa có'),
+                    _buildInfoRow(Icons.phone, 'Số điện thoại', phone ?? 'Chưa có'),
+                    _buildInfoRow(Icons.location_on, 'Địa chỉ', address ?? 'Chưa có'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Actions Card
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Tùy chọn',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _openChangePassword,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepPurple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.lock_reset, size: 18),
+                        label: const Text(
+                          'Đổi mật khẩu',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _logout,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.logout, size: 18),
+                        label: const Text(
+                          'Đăng xuất',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Row(
         children: [
-          const Text('Thông tin tài khoản', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          Text('Email: ${email ?? "Không có"}'),
-          Text('Vai trò: ${role ?? "Không có"}'),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            onPressed: _openChangePassword,
-            icon: const Icon(Icons.lock_reset),
-            label: const Text('Đổi mật khẩu'),
+          Icon(
+            icon,
+            color: Colors.deepPurple,
+            size: 18,
           ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-            label: const Text('Đăng xuất'),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  Color _getRoleColor(String role) {
+    switch (role) {
+      case 'ADMIN':
+        return Colors.red;
+      case 'SUB_ADMIN':
+        return Colors.orange;
+      case 'AGENT':
+        return Colors.blue;
+      case 'USER':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getRoleDisplayName(String role) {
+    switch (role) {
+      case 'ADMIN':
+        return 'Quản trị viên';
+      case 'SUB_ADMIN':
+        return 'Phó quản trị';
+      case 'AGENT':
+        return 'Đại lý';
+      case 'USER':
+        return 'Người dùng';
+      default:
+        return role;
+    }
   }
 } 

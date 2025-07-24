@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:qr_homegy/screens/home/qr_code/order_code_all_screen.dart';
 import 'distributor_list_screen.dart';
-import 'qr_code/qrcode_list_screen.dart';
 import 'statistics_screen.dart';
-import 'qr_code/qrcode_lookup_screen.dart';
+
 import '../auth/change_password_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'account_screen.dart';
+import '../../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   final int userId;
@@ -19,6 +20,22 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshUserProfile();
+  }
+
+  Future<void> _refreshUserProfile() async {
+    try {
+      // Gọi API để cập nhật thông tin user khi màn hình được load
+      await ApiService.getCurrentUserProfile();
+    } catch (e) {
+      // Không hiển thị lỗi nếu không thể cập nhật profile
+      print('Không thể cập nhật profile: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,10 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.qr_code),
             label: 'Mã QR',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: 'Tra cứu QR',
-          ),
+
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart),
             label: 'Thống kê',
@@ -69,12 +83,10 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0:
         return const DistributorListScreen();
       case 1:
-        return const QRCodeScreen();
+        return const OrderCodeAllScreen();
       case 2:
-        return const QRCodeLookupScreen();
-      case 3:
         return const StatisticsScreen();
-      case 4:
+      case 3:
         return AccountScreen(onLogout: widget.onLogout);
       default:
         return const SizedBox();

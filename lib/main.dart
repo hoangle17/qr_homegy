@@ -54,9 +54,9 @@ class _MyAppState extends State<MyApp> {
         });
       }
     } else {
-      setState(() {
+    setState(() {
         _isLoggedIn = false;
-      });
+    });
     }
   }
 

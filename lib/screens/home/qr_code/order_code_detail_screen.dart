@@ -7,11 +7,14 @@ import 'package:cross_file/cross_file.dart';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../models/order.dart';
 import '../../../models/device.dart';
 import '../../../services/api_service.dart';
 import 'order_id_qr_screen.dart';
 import 'device_qr_screen.dart';
+import 'qr_save_web.dart'
+    if (dart.library.io) 'qr_save_mobile.dart';
 
 class OrderCodeDetailScreen extends StatefulWidget {
   final Order order;
@@ -497,7 +500,7 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
+                            Text(
                                   'Devices: (${_order!.devices.length})',
                                   style: Theme.of(context).textTheme.titleMedium,
                                 ),
@@ -725,7 +728,9 @@ class _QRCodeShareDialogState extends State<_QRCodeShareDialog> {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Đã chia sẻ ${widget.devices.length} QR code'),
+            content: Text(kIsWeb 
+              ? 'Đã tải ${widget.devices.length} QR code về máy!' 
+              : 'Đã chia sẻ ${widget.devices.length} QR code'),
             backgroundColor: Colors.green,
           ),
         );
@@ -761,30 +766,40 @@ class _QRCodeShareDialogState extends State<_QRCodeShareDialog> {
 
   Future<void> _shareQRCodes(List<Uint8List> qrImages) async {
     try {
-      // Tạo thư mục tạm để lưu ảnh QR
-      final tempDir = await getTemporaryDirectory();
-      final qrFiles = <File>[];
-      
-      // Lưu từng QR code thành file
-      for (int i = 0; i < qrImages.length; i++) {
-        final device = widget.devices[i];
-        final fileName = 'qr_${device.macAddress.replaceAll(':', '_')}.png';
-        final file = File('${tempDir.path}/$fileName');
-        await file.writeAsBytes(qrImages[i]);
-        qrFiles.add(file);
-      }
-      
-      // Chia sẻ tất cả file QR codes
-      await Share.shareXFiles(
-        qrFiles.map((file) => XFile(file.path)).toList(),
-        subject: 'QR Codes từ đơn hàng ${widget.orderId}',
-        text: 'QR Codes của ${widget.devices.length} devices từ đơn hàng ${widget.orderId}',
-      );
-      
-      // Xóa file tạm sau khi chia sẻ
-      for (final file in qrFiles) {
-        if (await file.exists()) {
-          await file.delete();
+      if (kIsWeb) {
+        // Trên web: tải từng QR code về máy
+        final fileNames = <String>[];
+        for (final device in widget.devices) {
+          fileNames.add('qr_${device.macAddress.replaceAll(':', '_')}.png');
+        }
+        // ignore: undefined_function
+        shareMultipleQrWeb(qrImages, fileNames);
+      } else {
+        // Trên mobile: tạo thư mục tạm để lưu ảnh QR
+        final tempDir = await getTemporaryDirectory();
+        final qrFiles = <File>[];
+        
+        // Lưu từng QR code thành file
+        for (int i = 0; i < qrImages.length; i++) {
+          final device = widget.devices[i];
+          final fileName = 'qr_${device.macAddress.replaceAll(':', '_')}.png';
+          final file = File('${tempDir.path}/$fileName');
+          await file.writeAsBytes(qrImages[i]);
+          qrFiles.add(file);
+        }
+        
+        // Chia sẻ tất cả file QR codes
+        await Share.shareXFiles(
+          qrFiles.map((file) => XFile(file.path)).toList(),
+          subject: 'QR Codes từ đơn hàng ${widget.orderId}',
+          text: 'QR Codes của ${widget.devices.length} devices từ đơn hàng ${widget.orderId}',
+        );
+        
+        // Xóa file tạm sau khi chia sẻ
+        for (final file in qrFiles) {
+          if (await file.exists()) {
+            await file.delete();
+          }
         }
       }
     } catch (e) {

@@ -162,7 +162,7 @@ class _QRScanScreenState extends State<QRScanScreen> {
               ),
             ),
           );
-        }
+          }
       } else {
         if (mounted) {
           _showDeviceNotFoundDialog(macAddress);
@@ -180,10 +180,10 @@ class _QRScanScreenState extends State<QRScanScreen> {
       final order = await ApiService.getOrderDetail(orderId);
       
       if (order != null) {
-        setState(() {
+    setState(() {
           _foundOrder = order;
-        });
-        
+    });
+
         if (mounted) {
           await Navigator.push(
             context,
@@ -202,7 +202,7 @@ class _QRScanScreenState extends State<QRScanScreen> {
     } catch (e) {
       if (mounted) {
         _showErrorDialog('Lỗi khi lấy chi tiết đơn hàng: $e');
-      }
+  }
     }
   }
 
@@ -222,7 +222,7 @@ class _QRScanScreenState extends State<QRScanScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Không tìm thấy đơn hàng với mã:'),
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -378,7 +378,7 @@ class _QRScanScreenState extends State<QRScanScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('OK'),
-          ),
+            ),
         ],
       ),
     );
@@ -401,9 +401,9 @@ class _QRScanScreenState extends State<QRScanScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.warning,
-                  size: 60,
-                  color: Colors.orange,
+                    Icons.warning,
+                    size: 60,
+                    color: Colors.orange,
                 ),
                 const SizedBox(height: 30),
                 const Text(

@@ -160,7 +160,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+        children: [
             const Icon(Icons.error, color: Colors.red, size: 64),
             const SizedBox(height: 16),
             Text(
@@ -168,7 +168,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               style: const TextStyle(fontSize: 16, color: Colors.red),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
+          const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadDevices,
               child: const Text('Thử lại'),
@@ -238,7 +238,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               fillColor: Colors.grey[50],
             ),
           ),
-        ),
+          ),
         const SizedBox(height: 16),
         // Danh sách devices
         Expanded(
@@ -329,7 +329,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             fontWeight: FontWeight.bold,
             color: color,
           ),
-        ),
+          ),
         Text(
           title,
           style: const TextStyle(fontSize: 12, color: Colors.grey),

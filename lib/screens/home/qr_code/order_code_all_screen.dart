@@ -6,12 +6,16 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cross_file/cross_file.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../models/order.dart';
 import '../../../models/device.dart';
 import '../../../services/api_service.dart';
 import 'order_code_detail_screen.dart';
 import 'order_code_create_screen.dart';
 import 'order_search_screen.dart';
+import 'qr_save_web.dart'
+    if (dart.library.io) 'qr_save_mobile.dart';
 
 class OrderCodeAllScreen extends StatefulWidget {
   const OrderCodeAllScreen({super.key});
@@ -107,34 +111,42 @@ class _OrderCodeAllScreenState extends State<OrderCodeAllScreen> {
       // Lấy danh sách đơn hàng được chọn
       final selectedOrders = _orders.where((order) => _selectedOrders.contains(order.id)).toList();
       
-      // Tạo file text
-      final textFile = await _generateOrdersPDF(selectedOrders);
-      
       // Đóng loading dialog
       if (mounted) {
         Navigator.pop(context);
       }
 
-      // Chia sẻ file text
-      await Share.shareXFiles(
-        [XFile(textFile.path)],
-        subject: 'Danh sách đơn hàng (${selectedOrders.length} đơn)',
-        text: 'Danh sách ${selectedOrders.length} đơn hàng được chọn',
-      );
+      if (kIsWeb) {
+        // Trên web: tạo PDF và tải về
+        final pdfBytes = await _generateOrdersPDFBytes(selectedOrders);
+        final fileName = 'orders_${DateTime.now().millisecondsSinceEpoch}.pdf';
+        // ignore: undefined_function
+        savePdfWeb(pdfBytes, fileName);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đã tải PDF với ${selectedOrders.length} đơn hàng về máy!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        // Trên mobile: tạo file và chia sẻ
+        final textFile = await _generateOrdersPDF(selectedOrders);
+        
+        // Chia sẻ file PDF
+        await Share.shareXFiles(
+          [XFile(textFile.path)],
+          subject: 'Danh sách đơn hàng (${selectedOrders.length} đơn)',
+          text: 'Danh sách ${selectedOrders.length} đơn hàng được chọn',
+        );
 
-      // Xóa file tạm
-      if (await textFile.exists()) {
-        await textFile.delete();
+        // Xóa file tạm
+        if (await textFile.exists()) {
+          await textFile.delete();
+        }
       }
-
-      // if (mounted) {
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //     SnackBar(
-      //       content: Text('Đã chia sẻ PDF với ${selectedOrders.length} đơn hàng'),
-      //       backgroundColor: Colors.green,
-      //     ),
-      //   );
-      // }
     } catch (e) {
       print('Lỗi khi tạo PDF: $e');
       // Đóng loading dialog nếu có lỗi
@@ -176,6 +188,30 @@ class _OrderCodeAllScreenState extends State<OrderCodeAllScreen> {
     await file.writeAsBytes(await pdf.save());
     
     return file;
+  }
+
+  Future<Uint8List> _generateOrdersPDFBytes(List<Order> orders) async {
+    // Load font Unicode để hỗ trợ tiếng Việt
+    final fontData = await rootBundle.load('assets/fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf');
+    final ttf = pw.Font.ttf(fontData);
+    
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        theme: pw.ThemeData.withFont(
+          base: ttf,
+          bold: ttf,
+          italic: ttf,
+          boldItalic: ttf,
+        ),
+        build: (context) => _buildPDFWidgets(orders),
+      ),
+    );
+
+    // Trả về bytes thay vì lưu file
+    return await pdf.save();
   }
 
   pw.Widget _buildOrderWidget(Order order) {

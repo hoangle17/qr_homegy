@@ -48,7 +48,19 @@ class _DeviceQrScreenState extends State<DeviceQrScreen> {
 
   Future<void> _shareQRCode() async {
     if (kIsWeb) {
-      await Share.share('Mã QR: ${widget.macAddress}');
+      // Trên web: tạo QR và tải về
+      try {
+        final Uint8List? qrImageBytes = await _captureQRCode();
+        if (qrImageBytes == null) {
+          _showSnackBar('Lỗi khi tạo ảnh QR');
+          return;
+        }
+        // ignore: undefined_function
+        shareQrWeb(qrImageBytes);
+        _showSnackBar('Đã tải ảnh QR về máy!');
+      } catch (e) {
+        _showSnackBar('Lỗi khi tải ảnh QR: $e');
+      }
       return;
     }
     try {

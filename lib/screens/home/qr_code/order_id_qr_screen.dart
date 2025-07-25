@@ -11,8 +11,8 @@ import 'package:image/image.dart' as img;
 import 'package:media_store_plus/media_store_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
-import 'qr_save_mobile.dart'
-    if (dart.library.html) 'qr_save_web.dart';
+import 'qr_save_web.dart'
+    if (dart.library.io) 'qr_save_mobile.dart';
 
 class OrderIdQrScreen extends StatefulWidget {
   final String orderId;
@@ -38,7 +38,19 @@ class _OrderIdQrScreenState extends State<OrderIdQrScreen> {
 
   Future<void> _shareQRCode() async {
     if (kIsWeb) {
-      await Share.share('Mã QR: ${widget.orderId}');
+      // Trên web: tạo QR và tải về
+      try {
+        final Uint8List? qrImageBytes = await _captureQRCode();
+        if (qrImageBytes == null) {
+          _showSnackBar('Lỗi khi tạo ảnh QR');
+          return;
+        }
+        // ignore: undefined_function
+        shareQrWeb(qrImageBytes);
+        _showSnackBar('Đã tải ảnh QR về máy!');
+      } catch (e) {
+        _showSnackBar('Lỗi khi tải ảnh QR: $e');
+      }
       return;
     }
     try {

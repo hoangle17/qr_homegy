@@ -169,7 +169,7 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
       final roleResult = await ApiService.updateUserRole(
         targetUserId: widget.user!.id,
         newRole: _role!,
-      );
+        );
 
       if (roleResult['success']) {
         if (mounted) {
@@ -179,7 +179,7 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pop(context);
+      Navigator.pop(context);
         }
       } else {
         if (mounted) {
@@ -280,11 +280,11 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
 
   Widget _buildProfileTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          children: [
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
             // Permission info card
             if (_currentUserRole != null) ...[
               Container(
@@ -329,8 +329,8 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
               const SizedBox(height: 16),
             ],
             
-            TextFormField(
-              controller: _nameController,
+              TextFormField(
+                controller: _nameController,
               decoration: const InputDecoration(
                 labelText: 'Tên',
                 border: OutlineInputBorder(),
@@ -347,8 +347,8 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
               enabled: false, // Email không được phép sửa
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _addressController,
+              TextFormField(
+                controller: _addressController,
               decoration: const InputDecoration(
                 labelText: 'Địa chỉ',
                 border: OutlineInputBorder(),
@@ -356,8 +356,8 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
               // Bỏ validation check - cho phép để trống
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _phoneController,
+              TextFormField(
+                controller: _phoneController,
               decoration: const InputDecoration(
                 labelText: 'Số điện thoại',
                 border: OutlineInputBorder(),
@@ -427,7 +427,7 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
                           color: _getPermissionColor(),
                         ),
                       ),
-                    ],
+                ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -461,7 +461,7 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
-                ),
+              ),
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -476,10 +476,10 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
           const SizedBox(height: 24),
 
           // Role selection

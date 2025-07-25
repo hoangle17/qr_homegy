@@ -24,7 +24,6 @@ class Order {
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
-    // Xử lý cả response từ getOrders và getOrderDetail
     List<Device> devices = [];
     
     // Nếu có deviceInventories (từ getOrderDetail)

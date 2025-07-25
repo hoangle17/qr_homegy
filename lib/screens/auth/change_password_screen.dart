@@ -29,24 +29,24 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     
     try {
       final result = await ApiService.changePassword(
-        _currentController.text,
-        _newController.text,
-      );
+      _currentController.text,
+      _newController.text,
+    );
       
-      setState(() { _isLoading = false; });
+    setState(() { _isLoading = false; });
       
       if (result['success'] == true) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result['message'] ?? 'Đổi mật khẩu thành công!'),
               backgroundColor: Colors.green,
             ),
-          );
-          Navigator.pop(context);
-        }
-      } else {
-        setState(() {
+        );
+        Navigator.pop(context);
+      }
+    } else {
+      setState(() {
           _error = result['message'] ?? 'Đổi mật khẩu thất bại. Kiểm tra lại mật khẩu cũ hoặc thử lại.';
         });
       }
@@ -75,12 +75,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(32.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
+        child: Form(
+          key: _formKey,
+          child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+            children: [
                       const SizedBox(height: 8),
                       Icon(Icons.lock_reset, size: 64, color: Colors.deepPurple),
                       const SizedBox(height: 8),
@@ -88,64 +88,64 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.deepPurple)),
                       const SizedBox(height: 32),
-                      TextFormField(
-                        controller: _currentController,
-                        decoration: InputDecoration(
-                          labelText: 'Mật khẩu hiện tại',
+              TextFormField(
+                controller: _currentController,
+                decoration: InputDecoration(
+                  labelText: 'Mật khẩu hiện tại',
                           border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscureCurrent ? Icons.visibility_off : Icons.visibility),
-                            onPressed: () {
-                              setState(() {
-                                _obscureCurrent = !_obscureCurrent;
-                              });
-                            },
-                          ),
-                        ),
-                        obscureText: _obscureCurrent,
-                        validator: (v) => v == null || v.isEmpty ? 'Nhập mật khẩu hiện tại' : null,
-                      ),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureCurrent ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () {
+                      setState(() {
+                        _obscureCurrent = !_obscureCurrent;
+                      });
+                    },
+                  ),
+                ),
+                obscureText: _obscureCurrent,
+                validator: (v) => v == null || v.isEmpty ? 'Nhập mật khẩu hiện tại' : null,
+              ),
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _newController,
-                        decoration: InputDecoration(
-                          labelText: 'Mật khẩu mới',
+              TextFormField(
+                controller: _newController,
+                decoration: InputDecoration(
+                  labelText: 'Mật khẩu mới',
                           border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility),
-                            onPressed: () {
-                              setState(() {
-                                _obscureNew = !_obscureNew;
-                              });
-                            },
-                          ),
-                        ),
-                        obscureText: _obscureNew,
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () {
+                      setState(() {
+                        _obscureNew = !_obscureNew;
+                      });
+                    },
+                  ),
+                ),
+                obscureText: _obscureNew,
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'Nhập mật khẩu mới';
                           if (v.length < 6) return 'Mật khẩu phải có ít nhất 6 ký tự';
                           return null;
                         },
-                      ),
+              ),
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _confirmController,
-                        decoration: InputDecoration(
-                          labelText: 'Xác nhận mật khẩu mới',
+              TextFormField(
+                controller: _confirmController,
+                decoration: InputDecoration(
+                  labelText: 'Xác nhận mật khẩu mới',
                           border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
-                            onPressed: () {
-                              setState(() {
-                                _obscureConfirm = !_obscureConfirm;
-                              });
-                            },
-                          ),
-                        ),
-                        obscureText: _obscureConfirm,
-                        validator: (v) => v != _newController.text ? 'Mật khẩu xác nhận không khớp' : null,
-                      ),
-                      if (_error != null) ...[
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () {
+                      setState(() {
+                        _obscureConfirm = !_obscureConfirm;
+                      });
+                    },
+                  ),
+                ),
+                obscureText: _obscureConfirm,
+                validator: (v) => v != _newController.text ? 'Mật khẩu xác nhận không khớp' : null,
+              ),
+              if (_error != null) ...[
                         const SizedBox(height: 16),
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -167,12 +167,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                             ],
                           ),
                         ),
-                      ],
+              ],
                       const SizedBox(height: 24),
                       SizedBox(
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: _isLoading ? null : _changePassword,
+                onPressed: _isLoading ? null : _changePassword,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.deepPurple,
                             foregroundColor: Colors.white,
@@ -189,8 +189,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                                 )
                               : const Text('Đổi mật khẩu', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         ),
-                      ),
-                    ],
+              ),
+            ],
                   ),
                 ),
               ),

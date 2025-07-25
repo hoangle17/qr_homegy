@@ -287,7 +287,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     color: Colors.grey,
                     fontWeight: FontWeight.w500,
                   ),
-                ),
+          ),
                 const SizedBox(height: 1),
                 Text(
                   value,

@@ -249,8 +249,8 @@ class _DistributorListScreenState extends State<DistributorListScreen> {
               tooltip: 'Làm mới',
               onPressed: _loadUsers,
             ),
-            IconButton(
-              icon: const Icon(Icons.add),
+          IconButton(
+            icon: const Icon(Icons.add),
               tooltip: 'Thêm người dùng mới',
               onPressed: () => _showAddUserDialog(),
             ),
@@ -326,30 +326,30 @@ class _DistributorListScreenState extends State<DistributorListScreen> {
             ElevatedButton(
               onPressed: _loadUsers,
               child: const Text('Thử lại'),
-            ),
-          ],
-        ),
+          ),
+        ],
+      ),
       );
     }
 
     return Column(
-      children: [
-        Padding(
+        children: [
+          Padding(
           padding: const EdgeInsets.all(16.0),
-          child: TextField(
-            decoration: const InputDecoration(
+            child: TextField(
+              decoration: const InputDecoration(
               labelText: 'Tìm kiếm theo tên, email, số điện thoại, địa chỉ',
               hintText: 'Nhập từ khóa tìm kiếm...',
-              prefixIcon: Icon(Icons.search),
+                prefixIcon: Icon(Icons.search),
               border: OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _search = value;
+                });
+              },
             ),
-            onChanged: (value) {
-              setState(() {
-                _search = value;
-              });
-            },
           ),
-        ),
         if (_filteredUsers.isEmpty)
           Expanded(
             child: Center(
@@ -449,7 +449,7 @@ class _DistributorListScreenState extends State<DistributorListScreen> {
               },
             ),
           ),
-      ],
+        ],
     );
   }
 

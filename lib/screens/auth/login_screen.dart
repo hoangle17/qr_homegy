@@ -36,14 +36,14 @@ class _LoginScreenState extends State<LoginScreen> {
     
     try {
       final loginResponse = await ApiService.login(email, pass);
-      setState(() { _isLoading = false; });
+    setState(() { _isLoading = false; });
       
       if (loginResponse != null) {
         await _saveUserInfo(loginResponse);
         widget.onLoginSuccess(0);
-      } else {
-        setState(() {
-          _error = 'Sai email hoặc mật khẩu, hoặc lỗi server!';
+    } else {
+      setState(() {
+        _error = 'Sai email hoặc mật khẩu, hoặc lỗi server!';
         });
       }
     } catch (e) {

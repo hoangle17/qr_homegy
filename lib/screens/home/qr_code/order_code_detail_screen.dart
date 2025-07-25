@@ -8,6 +8,7 @@ import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:image/image.dart' as img;
 import '../../../models/order.dart';
 import '../../../models/device.dart';
 import '../../../services/api_service.dart';
@@ -761,7 +762,39 @@ class _QRCodeShareDialogState extends State<_QRCodeShareDialog> {
     );
 
     final qrImage = await qrPainter.toImageData(200.0);
-    return qrImage!.buffer.asUint8List();
+    final qrBytes = qrImage!.buffer.asUint8List();
+    
+    // Thêm padding cho ảnh QR (giống như trong device_qr_screen.dart)
+    final decodedImage = img.decodeImage(qrBytes);
+    if (decodedImage == null) {
+      return qrBytes; // Trả về ảnh gốc nếu không decode được
+    }
+
+    // Tạo ảnh mới với padding
+    final padding = 50;
+    final newWidth = decodedImage.width + (padding * 2);
+    final newHeight = decodedImage.height + (padding * 2);
+    
+    // Tạo ảnh trắng mới
+    final newImage = img.Image(width: newWidth, height: newHeight);
+    
+    // Fill background trắng
+    for (int y = 0; y < newHeight; y++) {
+      for (int x = 0; x < newWidth; x++) {
+        newImage.setPixel(x, y, img.ColorRgb8(255, 255, 255));
+      }
+    }
+    
+    // Copy QR code vào giữa
+    for (int y = 0; y < decodedImage.height; y++) {
+      for (int x = 0; x < decodedImage.width; x++) {
+        final pixel = decodedImage.getPixel(x, y);
+        newImage.setPixel(x + padding, y + padding, pixel);
+      }
+    }
+    
+    // Encode thành PNG với padding
+    return img.encodePng(newImage);
   }
 
   Future<void> _shareQRCodes(List<Uint8List> qrImages) async {

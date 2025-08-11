@@ -1,3 +1,39 @@
+class SkuCatalog {
+  final String skuCode;
+  final String name;
+  final String? description;
+  final String? manufacturer;
+  final String? category;
+
+  SkuCatalog({
+    required this.skuCode,
+    required this.name,
+    this.description,
+    this.manufacturer,
+    this.category,
+  });
+
+  factory SkuCatalog.fromJson(Map<String, dynamic> json) {
+    return SkuCatalog(
+      skuCode: json['skuCode'] ?? '',
+      name: json['name'] ?? '',
+      description: json['description'],
+      manufacturer: json['manufacturer'],
+      category: json['category'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'skuCode': skuCode,
+      'name': name,
+      'description': description,
+      'manufacturer': manufacturer,
+      'category': category,
+    };
+  }
+}
+
 class Device {
   final String? id; // ID của device inventory
   final String macAddress;
@@ -16,6 +52,7 @@ class Device {
   final String? createdBy;
   final String? customerId;
   final String skuCode;
+  final SkuCatalog? skuCatalog;
 
   Device({
     this.id,
@@ -35,6 +72,7 @@ class Device {
     this.createdBy,
     this.customerId,
     required this.skuCode,
+    this.skuCatalog,
   });
 
   factory Device.fromJson(Map<String, dynamic> json) {
@@ -45,7 +83,7 @@ class Device {
       thingID: json['thingID'], // Không fallback nữa, giữ nguyên null nếu API trả về null
       paymentStatus: json['payment_status'] ?? 'pending',
       isActive: json['isActive'] ?? false,
-      createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
+      createdAt: _parseDateTime(json['createdAt'] ?? ''),
       manufacturer: json['manufacturer'],
       model: json['model'],
       firmwareVersion: json['firmwareVersion'],
@@ -56,6 +94,7 @@ class Device {
       createdBy: json['created_by'],
       customerId: json['customer_id'],
       skuCode: json['skuCode'] ?? '',
+      skuCatalog: json['skuCatalog'] != null ? SkuCatalog.fromJson(json['skuCatalog']) : null,
     );
   }
 
@@ -78,6 +117,7 @@ class Device {
       'created_by': createdBy,
       'customer_id': customerId,
       'skuCode': skuCode,
+      'skuCatalog': skuCatalog?.toJson(),
     };
   }
 
@@ -99,6 +139,7 @@ class Device {
     String? createdBy,
     String? customerId,
     String? skuCode,
+    SkuCatalog? skuCatalog,
   }) {
     return Device(
       id: id ?? this.id,
@@ -118,7 +159,54 @@ class Device {
       createdBy: createdBy ?? this.createdBy,
       customerId: customerId ?? this.customerId,
       skuCode: skuCode ?? this.skuCode,
+      skuCatalog: skuCatalog ?? this.skuCatalog,
     );
+  }
+
+  // Helper method to parse DateTime with timezone support
+  static DateTime _parseDateTime(String dateString) {
+    try {
+      // Handle ISO 8601 format with timezone offset (+07:00)
+      if (dateString.contains('+') || (dateString.contains('-') && dateString.split('-').length > 3)) {
+        // Extract timezone offset
+        String timezoneOffset = '';
+        if (dateString.contains('+')) {
+          timezoneOffset = dateString.split('+')[1];
+          dateString = dateString.split('+')[0];
+        } else if (dateString.contains('-') && dateString.split('-').length > 3) {
+          final parts = dateString.split('-');
+          timezoneOffset = parts.last;
+          dateString = parts.take(parts.length - 1).join('-');
+        }
+        
+        // Parse the datetime without timezone - this gives us the local time as intended
+        final parsed = DateTime.tryParse(dateString);
+        if (parsed != null) {
+          return parsed; // Return the local time as is
+        }
+      }
+      
+      // Handle UTC format (ending with Z)
+      if (dateString.endsWith('Z')) {
+        final utcString = dateString.substring(0, dateString.length - 1);
+        final parsed = DateTime.tryParse(utcString);
+        if (parsed != null) {
+          // Convert UTC to local time (UTC+7 for Vietnam)
+          final localTime = parsed.add(const Duration(hours: 7));
+          return localTime;
+        }
+      }
+      
+      // Fallback: try to parse without timezone
+      final parsed = DateTime.tryParse(dateString);
+      if (parsed != null) {
+        return parsed;
+      }
+      
+      return DateTime.now();
+    } catch (e) {
+      return DateTime.now();
+    }
   }
 }
 

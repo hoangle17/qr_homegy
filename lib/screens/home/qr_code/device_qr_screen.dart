@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import '../../../models/device.dart';
 import '../../../services/api_service.dart';
+import '../../../widgets/copyable_text.dart';
 import 'qr_save_mobile.dart'
     if (dart.library.html) 'qr_save_web.dart';
 
@@ -37,6 +38,17 @@ class _DeviceQrScreenState extends State<DeviceQrScreen> {
   bool _isLoading = false;
   bool _isDeactivating = false;
   static const platform = MethodChannel('qr_homegy.share_channel');
+
+  // Helper function to format date in HH:mm dd-MM-yyyy format
+  String _formatDateTime(DateTime dateTime) {
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final second = dateTime.second.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final year = dateTime.year.toString();
+    return '$hour:$minute:$second $day/$month/$year';
+  }
 
   Future<void> shareImageNative(String filePath) async {
     try {
@@ -320,7 +332,7 @@ class _DeviceQrScreenState extends State<DeviceQrScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('QR Device'),
+        title: const Text('QR Kích hoạt thiết bị'),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
       ),
@@ -416,35 +428,35 @@ class _DeviceQrScreenState extends State<DeviceQrScreen> {
                   child: Column(
                     children: [
                       const Text(
-                        'Thông tin Device',
+                        'Thông tin thiết bị',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       const SizedBox(height: 8),
-                      _buildInfoRow('MAC Address:', widget.macAddress),
-                      _buildInfoRow('SKU Code:', widget.device.skuCode),
-                      _buildInfoRow('ThingID:', widget.device.thingID != null && widget.device.thingID!.isNotEmpty 
+                      _buildInfoRow('Mã QR:', widget.macAddress),
+                      _buildInfoRow('Mã thiết bị:', widget.device.skuCode),
+                      _buildInfoRow('Mã thing:', widget.device.thingID != null && widget.device.thingID!.isNotEmpty 
                         ? widget.device.thingID! 
                         : 'Chờ cập nhật'),
-                      _buildInfoRow('Payment Status:', widget.device.paymentStatus),
+                      _buildInfoRow('Trạng thái:', _getPaymentStatusText(widget.device.paymentStatus)),
                       if (widget.device.serialNumber != null)
-                        _buildInfoRow('Serial Number:', widget.device.serialNumber!),
+                        _buildInfoRow('Số serial:', widget.device.serialNumber!),
                       if (widget.device.manufacturer != null)
-                        _buildInfoRow('Manufacturer:', widget.device.manufacturer!),
+                        _buildInfoRow('Nhà sản xuất:', widget.device.manufacturer!),
                       if (widget.device.model != null)
                         _buildInfoRow('Model:', widget.device.model!),
                       if (widget.device.firmwareVersion != null)
                         _buildInfoRow('Firmware:', widget.device.firmwareVersion!),
                       if (widget.device.price != null)
-                        _buildInfoRow('Price:', '\$${widget.device.price}'),
-                      _buildInfoRow('Created Date:', widget.device.createdAt.toString().substring(0, 16)),
+                        _buildInfoRow('Giá:', '\$${widget.device.price}'),
+                      _buildInfoRow('Ngày tạo:', _formatDateTime(widget.device.createdAt)),
                       if (widget.device.activatedAt != null)
-                        _buildInfoRow('Activated Date:', widget.device.activatedAt.toString().substring(0, 16)),
+                        _buildInfoRow('Ngày kích hoạt:', _formatDateTime(widget.device.activatedAt!)),
                       if (widget.device.activatedBy != null)
-                        _buildInfoRow('Activated By:', widget.device.activatedBy!),
+                        _buildInfoRow('Người kích hoạt:', widget.device.activatedBy!),
                       if (widget.device.createdBy != null)
-                        _buildInfoRow('Created By:', widget.device.createdBy!),
+                        _buildInfoRow('Người tạo:', widget.device.createdBy!),
                       if (widget.device.customerId != null)
-                        _buildInfoRow('Customer ID:', widget.device.customerId!),
+                        _buildInfoRow('ID Khách hàng:', widget.device.customerId!),
                       const SizedBox(height: 16),
                       Row(
                         children: [
@@ -504,6 +516,21 @@ class _DeviceQrScreenState extends State<DeviceQrScreen> {
     );
   }
 
+  String _getPaymentStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case 'free':
+        return 'Miễn phí';
+      case 'paid':
+        return 'Đã thanh toán';
+      case 'pending':
+        return 'Chờ thanh toán';
+      case 'cancelled':
+        return 'Đã hủy';
+      default:
+        return status;
+    }
+  }
+
   Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -518,7 +545,10 @@ class _DeviceQrScreenState extends State<DeviceQrScreen> {
             ),
           ),
           Expanded(
-            child: Text(value),
+            child: CopyableText(
+              text: value,
+              copyMessage: 'Đã copy $label',
+            ),
           ),
         ],
       ),

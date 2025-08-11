@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:cross_file/cross_file.dart';
-import 'dart:ui' as ui;
-import 'dart:typed_data';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:media_store_plus/media_store_plus.dart';
+import 'package:intl/intl.dart';
+
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image/image.dart' as img;
+import 'package:flutter/services.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+
 import '../../../models/order.dart';
 import '../../../models/device.dart';
 import '../../../services/api_service.dart';
+import '../../../widgets/copyable_text.dart';
 import 'order_id_qr_screen.dart';
 import 'device_qr_screen.dart';
 import 'qr_save_web.dart'
@@ -36,8 +41,60 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
   bool _isDeactivating = false;
   bool _isUpdatingStatus = false;
   String? _error;
-  Set<String> _selectedDevices = {};
-  bool _selectAll = false;
+  // Lưu trạng thái mở/đóng cho từng nhóm sản phẩm
+  final Map<String, bool> _groupExpanded = {};
+
+
+  // Helper function to format date in HH:mm dd/MM/yyyy format
+  String _formatDateTime(DateTime dateTime) {
+    return DateFormat('HH:mm dd/MM/yyyy').format(dateTime);
+  }
+
+  // Helper function to get status text
+  String _getStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'Chờ xử lý';
+      case 'completed':
+        return 'Hoàn thành';
+      case 'cancelled':
+      case 'deactivated':
+        return 'Đã hủy';
+      default:
+        return status;
+    }
+  }
+
+
+
+  // Helper function to generate QR code bytes
+  Future<Uint8List> _generateQRCodeBytes(String data) async {
+    try {
+      final qrPainter = QrPainter(
+        data: data,
+        version: QrVersions.auto,
+        gapless: true,
+        embeddedImage: null,
+        embeddedImageStyle: null,
+        dataModuleStyle: const QrDataModuleStyle(
+          dataModuleShape: QrDataModuleShape.square,
+          color: Color(0xFF000000),
+        ),
+        eyeStyle: const QrEyeStyle(
+          eyeShape: QrEyeShape.square,
+          color: Color(0xFF000000),
+        ),
+        errorCorrectionLevel: QrErrorCorrectLevel.M,
+      );
+
+      final qrImage = await qrPainter.toImageData(200.0);
+      return qrImage!.buffer.asUint8List();
+    } catch (e) {
+      print('Error generating QR code: $e');
+      // Return empty bytes if QR generation fails
+      return Uint8List(0);
+    }
+  }
 
   @override
   void initState() {
@@ -57,8 +114,6 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
       if (orderDetail != null) {
         setState(() {
           _order = orderDetail;
-          _selectedDevices.clear();
-          _selectAll = false;
           _isLoading = false;
         });
       } else {
@@ -75,86 +130,66 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
     }
   }
 
-  void _toggleDeviceSelection(String macAddress) {
-    setState(() {
-      if (_selectedDevices.contains(macAddress)) {
-        _selectedDevices.remove(macAddress);
-      } else {
-        _selectedDevices.add(macAddress);
-      }
-      _updateSelectAllState();
-    });
-  }
 
-  void _toggleSelectAll() {
-    setState(() {
-      if (_selectAll) {
-        _selectedDevices.clear();
-        _selectAll = false;
-      } else {
-        _selectedDevices = _order!.devices.map((d) => d.macAddress).toSet();
-        _selectAll = true;
-      }
-    });
-  }
 
-  void _updateSelectAllState() {
-    if (_order != null) {
-      final allSelected = _order!.devices.every((d) => _selectedDevices.contains(d.macAddress));
-      if (_selectAll != allSelected) {
-        setState(() {
-          _selectAll = allSelected;
-        });
-      }
-    }
-  }
+  Future<void> _deactivateOrder() async {
+    if (_order == null) return;
 
-  Future<void> _shareSelectedQRCodes() async {
-    if (_selectedDevices.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vui lòng chọn ít nhất một device để chia sẻ'),
-          backgroundColor: Colors.orange,
+    // Kiểm tra xem có thiết bị nào đã kích hoạt chưa
+    final activatedDevices = _order!.devices.where((device) => device.isActive).toList();
+    
+    if (activatedDevices.isNotEmpty) {
+      // Có thiết bị đã kích hoạt, không cho phép hủy đơn hàng
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Thông báo'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Đơn hàng này không thể hủy vì có thiết bị đã được kích hoạt.',
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Số thiết bị đã kích hoạt: ${activatedDevices.length}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Vui lòng hủy kích hoạt tất cả thiết bị trước khi hủy đơn hàng.',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Đóng'),
+            ),
+          ],
         ),
       );
       return;
     }
 
-    try {
-      final selectedDevices = _order!.devices.where((d) => _selectedDevices.contains(d.macAddress)).toList();
-      
-      // Hiển thị dialog để tạo và chia sẻ QR codes
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => _QRCodeShareDialog(
-          devices: selectedDevices,
-          orderId: _order!.id,
-        ),
-      );
-      
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Lỗi khi chia sẻ: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _deactivateOrder() async {
-    if (_order == null) return;
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Xác nhận Deactive Đơn hàng'),
+        title: const Text('Xác nhận hủy Đơn hàng'),
         content: Text(
           'Bạn có chắc chắn muốn vô hiệu hóa đơn hàng này?\n\n'
           'Hành động này sẽ:\n'
           '• Chuyển trạng thái đơn hàng thành "Đã hủy"\n'
-          '• Chuyển tất cả ${_order!.devices.length} devices về trạng thái "chưa kích hoạt"\n\n'
+          '• Chuyển tất cả ${_order!.devices.length} thiết bị về trạng thái "chưa kích hoạt"\n\n'
           'Hành động này không thể hoàn tác!',
         ),
         actions: [
@@ -168,7 +203,7 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Deactive'),
+            child: const Text('Xác nhận'),
           ),
         ],
       ),
@@ -184,43 +219,52 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
       final success = await ApiService.deactivateOrder(_order!.id);
       
       if (success) {
-        // Cập nhật trạng thái local - cả đơn hàng và tất cả devices
-        final updatedDevices = _order!.devices.map((device) => Device(
-          id: device.id,
-          macAddress: device.macAddress,
-          serialNumber: device.serialNumber,
-          thingID: device.thingID,
-          paymentStatus: device.paymentStatus,
-          isActive: false, // Tất cả devices sẽ được chuyển về isActive: false
-          createdAt: device.createdAt,
-          manufacturer: device.manufacturer,
-          model: device.model,
-          firmwareVersion: device.firmwareVersion,
-          activatedAt: device.activatedAt,
-          activatedBy: device.activatedBy,
-          orderId: device.orderId,
-          price: device.price,
-          createdBy: device.createdBy,
-          customerId: device.customerId,
-          skuCode: device.skuCode,
-        )).toList();
+        // Sau khi hủy thành công: gọi lại API chi tiết đơn hàng để refresh UI
+        final refreshedOrder = await ApiService.getOrderDetail(_order!.id);
+        
+        if (refreshedOrder != null) {
+          setState(() {
+            _order = refreshedOrder;
+          });
+        } else {
+          // Fallback: Cập nhật local nếu không lấy được dữ liệu mới
+          final updatedDevices = _order!.devices.map((device) => Device(
+            id: device.id,
+            macAddress: device.macAddress,
+            serialNumber: device.serialNumber,
+            thingID: device.thingID,
+            paymentStatus: device.paymentStatus,
+            isActive: false,
+            createdAt: device.createdAt,
+            manufacturer: device.manufacturer,
+            model: device.model,
+            firmwareVersion: device.firmwareVersion,
+            activatedAt: device.activatedAt,
+            activatedBy: device.activatedBy,
+            orderId: device.orderId,
+            price: device.price,
+            createdBy: device.createdBy,
+            customerId: device.customerId,
+            skuCode: device.skuCode,
+          )).toList();
 
-        final updatedOrder = Order(
-          id: _order!.id,
-          customerId: _order!.customerId,
-          customerName: _order!.customerName,
-          createdBy: _order!.createdBy,
-          createdAt: _order!.createdAt,
-          status: 'deactivated', // Đơn hàng chuyển thành deactivated
-          note: _order!.note,
-          devices: updatedDevices, // Cập nhật devices với isActive: false
-          deviceCount: _order!.deviceCount,
-        );
-        
-        setState(() {
-          _order = updatedOrder;
-        });
-        
+          final updatedOrder = Order(
+            id: _order!.id,
+            customerId: _order!.customerId,
+            customerName: _order!.customerName,
+            createdBy: _order!.createdBy,
+            createdAt: _order!.createdAt,
+            status: 'deactivated',
+            note: _order!.note,
+            devices: updatedDevices,
+            deviceCount: _order!.deviceCount,
+          );
+          
+          setState(() {
+            _order = updatedOrder;
+          });
+        }
+
         // Gọi callback để reload danh sách đơn hàng
         widget.onOrderUpdated?.call();
         
@@ -261,13 +305,410 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
     }
   }
 
+  Future<void> _shareOrderPDF() async {
+    if (_order == null) return;
+
+    try {
+      // Hiển thị loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Đang tạo file PDF...'),
+            ],
+          ),
+        ),
+      );
+
+      final pdfBytes = await _generateOrderPDFBytes(_order!);
+      
+      // Đóng loading dialog
+      Navigator.pop(context);
+
+      // Chia sẻ file PDF
+      if (kIsWeb) {
+        // Trên web: sử dụng XFile.fromData
+        await Share.shareXFiles(
+          [XFile.fromData(pdfBytes, name: 'chi_tiet_don_hang_${_order!.id}.pdf')],
+          text: 'Chi tiết đơn hàng ${_order!.id}',
+        );
+      } else {
+        // Trên mobile: lưu file tạm rồi chia sẻ
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/chi_tiet_don_hang_${_order!.id}.pdf');
+        await file.writeAsBytes(pdfBytes);
+        
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Chi tiết đơn hàng ${_order!.id}',
+        );
+      }
+    } catch (e) {
+      // Đóng loading dialog nếu có lỗi
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi tạo PDF: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _downloadOrderPDF() async {
+    if (_order == null) return;
+
+    try {
+      // Hiển thị loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Đang tạo file PDF...'),
+            ],
+          ),
+        ),
+      );
+
+      final pdfBytes = await _generateOrderPDFBytes(_order!);
+
+      // Đóng loading dialog
+      Navigator.pop(context);
+
+      final fileName = 'chi_tiet_don_hang_${_order!.id}.pdf';
+
+      if (kIsWeb) {
+        // ignore: undefined_function
+        savePdfWeb(pdfBytes, fileName);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã tải PDF về máy!'), backgroundColor: Colors.green),
+        );
+        return;
+      }
+
+      // Mobile: lưu vào thư mục Tải xuống/Downloads (thư viện Ảnh trên iOS/Android)
+      await MediaStore.ensureInitialized();
+      final storageStatus = await Permission.storage.request();
+      final photosStatus = await Permission.photos.request();
+      if (!storageStatus.isGranted && !photosStatus.isGranted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cần quyền bộ nhớ/ảnh để lưu PDF'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final tempPath = '${tempDir.path}/$fileName';
+      final tempFile = File(tempPath);
+      await tempFile.writeAsBytes(pdfBytes);
+
+      MediaStore.appFolder = 'QR_Generator';
+      final result = await MediaStore().saveFile(
+        tempFilePath: tempPath,
+        dirType: DirType.download,
+        dirName: DirName.download,
+      );
+
+      if (result != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã lưu PDF vào Downloads!'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lỗi khi lưu PDF!'), backgroundColor: Colors.red),
+        );
+      }
+
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+    } catch (e) {
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi khi tải PDF: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _showPdfOptions() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.share),
+                title: const Text('Chia sẻ PDF'),
+                onTap: () => Navigator.pop(context, 'share'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.download),
+                title: const Text('Tải về máy'),
+                onTap: () => Navigator.pop(context, 'download'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (action == 'share') {
+      await _shareOrderPDF();
+    } else if (action == 'download') {
+      await _downloadOrderPDF();
+    }
+  }
+
+  Future<Uint8List> _generateOrderPDFBytes(Order order) async {
+    // Load font Unicode để hỗ trợ tiếng Việt
+    final fontData = await rootBundle.load('assets/fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf');
+    final ttf = pw.Font.ttf(fontData);
+    
+    // Tạo QR codes cho tất cả thiết bị
+    final Map<String, Uint8List> qrCodes = {};
+    for (final device in order.devices) {
+      final qrBytes = await _generateQRCodeBytes(device.macAddress);
+      qrCodes[device.macAddress] = qrBytes;
+    }
+    
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        theme: pw.ThemeData.withFont(
+          base: ttf,
+          bold: ttf,
+          italic: ttf,
+          boldItalic: ttf,
+        ),
+        build: (context) => _buildOrderPDFWidgets(order, qrCodes),
+      ),
+    );
+
+    return await pdf.save();
+  }
+
+  List<pw.Widget> _buildOrderPDFWidgets(Order order, Map<String, Uint8List> qrCodes) {
+    final widgets = <pw.Widget>[];
+    
+    // Header
+    widgets.add(pw.Header(
+      level: 0,
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            'CHI TIẾT ĐƠN HÀNG',
+            style: pw.TextStyle(
+              fontSize: 20,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          pw.Text(
+            'Ngày tạo: ${_formatDateTime(DateTime.now())}',
+            style: pw.TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+    ));
+    
+    // Thông tin đơn hàng
+    widgets.add(pw.Container(
+      margin: pw.EdgeInsets.only(bottom: 20),
+      padding: pw.EdgeInsets.all(15),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            'THÔNG TIN ĐƠN HÀNG',
+            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('ID: ${order.id}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+              pw.Text('Trạng thái: ${_getStatusText(order.status)}', style: pw.TextStyle(fontSize: 12)),
+            ],
+          ),
+          pw.SizedBox(height: 8),
+          pw.Text('Khách hàng: ${order.customerName}', style: pw.TextStyle(fontSize: 12)),
+          pw.Text('Người tạo: ${order.createdBy}', style: pw.TextStyle(fontSize: 12)),
+          pw.Text('Ngày tạo: ${_formatDateTime(order.createdAt)}', style: pw.TextStyle(fontSize: 12)),
+          pw.Text('Số lượng device: ${order.deviceCount}', style: pw.TextStyle(fontSize: 12)),
+          if (order.note != null && order.note!.isNotEmpty)
+            pw.Text('Ghi chú: ${order.note}', style: pw.TextStyle(fontSize: 12)),
+        ],
+      ),
+    ));
+
+    // Danh sách devices theo nhóm
+    if (order.devices.isNotEmpty) {
+      widgets.add(pw.Text(
+        'CHI TIẾT THIẾT BỊ',
+        style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+      ));
+      widgets.add(pw.SizedBox(height: 10));
+      
+      // Nhóm thiết bị theo skuCatalog.name
+      final Map<String, List<Device>> groupedDevices = {};
+      
+      for (final device in order.devices) {
+        final groupName = device.skuCatalog?.name ?? 'Thiết bị khác';
+        if (!groupedDevices.containsKey(groupName)) {
+          groupedDevices[groupName] = [];
+        }
+        groupedDevices[groupName]!.add(device);
+      }
+      
+      // Tạo widget cho từng nhóm
+      groupedDevices.forEach((groupName, devices) {
+        // Header cho nhóm
+        widgets.add(pw.Container(
+          margin: pw.EdgeInsets.only(bottom: 10),
+          padding: pw.EdgeInsets.all(8),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.grey100,
+            borderRadius: pw.BorderRadius.all(pw.Radius.circular(5)),
+          ),
+          child: pw.Text(
+            '$groupName (${devices.length} thiết bị)',
+            style: pw.TextStyle(
+              fontSize: 14,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+        ));
+        
+        // Danh sách thiết bị trong nhóm
+        for (int i = 0; i < devices.length; i++) {
+          final device = devices[i];
+          // Lấy QR code đã tạo sẵn
+          final qrBytes = qrCodes[device.macAddress];
+          widgets.add(_buildDevicePDFWidget(device, i + 1, qrBytes));
+          if (i < devices.length - 1) {
+            widgets.add(pw.SizedBox(height: 15)); // Khoảng cách giữa các thiết bị
+            // Thêm separator line
+            widgets.add(pw.Container(
+              height: 1,
+              color: PdfColors.grey300,
+              margin: pw.EdgeInsets.symmetric(vertical: 5),
+            ));
+            widgets.add(pw.SizedBox(height: 15));
+          }
+        }
+        
+        // Khoảng cách giữa các nhóm
+        if (groupedDevices.keys.last != groupName) {
+          widgets.add(pw.SizedBox(height: 15));
+        }
+      });
+    }
+
+    return widgets;
+  }
+
+  pw.Widget _buildDevicePDFWidget(Device device, int index, Uint8List? qrBytes) {
+    return pw.Container(
+      padding: pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.black, width: 1),
+        borderRadius: pw.BorderRadius.all(pw.Radius.circular(5)),
+        color: index % 2 == 0 ? PdfColors.grey50 : PdfColors.white, // Alternating background
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Thiết bị #$index',
+                      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Text('Mã: ${device.macAddress}', style: pw.TextStyle(fontSize: 11)),
+                    pw.Text('Mã sản phẩm: ${device.skuCode}', style: pw.TextStyle(fontSize: 11)),
+                                      if (device.skuCatalog?.description != null && device.skuCatalog!.description!.isNotEmpty)
+                    pw.Text('Mô tả: ${device.skuCatalog!.description}', style: pw.TextStyle(fontSize: 11)),
+                    if (device.serialNumber != null && device.serialNumber!.isNotEmpty)
+                      pw.Text('Serial Number: ${device.serialNumber}', style: pw.TextStyle(fontSize: 11)),
+                    if (device.model != null && device.model!.isNotEmpty)
+                      pw.Text('Model: ${device.model}', style: pw.TextStyle(fontSize: 11)),
+                    if (device.manufacturer != null && device.manufacturer!.isNotEmpty)
+                      pw.Text('Manufacturer: ${device.manufacturer}', style: pw.TextStyle(fontSize: 11)),
+                    if (device.firmwareVersion != null && device.firmwareVersion!.isNotEmpty)
+                      pw.Text('Firmware: ${device.firmwareVersion}', style: pw.TextStyle(fontSize: 11)),
+                    if (device.price != null)
+                      pw.Text('Price: \$${device.price!.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 11)),
+                    if (device.activatedAt != null)
+                      pw.Text('Ngày kích hoạt: ${_formatDateTime(device.activatedAt!)}', style: pw.TextStyle(fontSize: 11)),
+                    if (device.activatedBy != null && device.activatedBy!.isNotEmpty)
+                      pw.Text('Người kích hoạt: ${device.activatedBy}', style: pw.TextStyle(fontSize: 11)),
+                    pw.Text('Trạng thái: ${device.isActive ? "Kích hoạt" : "Chưa kích hoạt"}', style: pw.TextStyle(fontSize: 11)),
+                  ],
+                ),
+              ),
+                          pw.SizedBox(width: 15),
+            if (qrBytes != null && qrBytes.isNotEmpty)
+              pw.Image(
+                pw.MemoryImage(qrBytes),
+                width: 80,
+                height: 80,
+              )
+            else
+              pw.Container(
+                width: 80,
+                height: 80,
+                child: pw.Center(
+                  child: pw.Text(
+                    'QR',
+                    style: pw.TextStyle(fontSize: 10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _updateOrderStatus() async {
     if (_order == null) return;
 
     // Danh sách trạng thái có thể chọn
     final statuses = [
-      {'value': 'pending', 'name': 'Chờ xử lý', 'color': Colors.orange},
-      {'value': 'completed', 'name': 'Hoàn thành', 'color': Colors.green},
+      {'value': 'pending', 'name': 'Chờ thanh toán', 'color': Colors.orange},
+      {'value': 'completed', 'name': 'Thanh toán', 'color': Colors.green},
     ];
 
     // Hiển thị dialog chọn trạng thái
@@ -311,34 +752,56 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
       final success = await ApiService.updateOrderStatus(_order!.id, selectedStatus);
       
       if (success) {
-        // Cập nhật trạng thái local
-        final updatedOrder = Order(
-          id: _order!.id,
-          customerId: _order!.customerId,
-          customerName: _order!.customerName,
-          createdBy: _order!.createdBy,
-          createdAt: _order!.createdAt,
-          status: selectedStatus,
-          note: _order!.note,
-          devices: _order!.devices,
-          deviceCount: _order!.deviceCount,
-        );
+        // Gọi lại API chi tiết đơn hàng để cập nhật dữ liệu mới nhất
+        final updatedOrderDetail = await ApiService.getOrderDetail(_order!.id);
         
-        setState(() {
-          _order = updatedOrder;
-        });
-        
-        // Gọi callback để reload danh sách đơn hàng
-        widget.onOrderUpdated?.call();
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Đã cập nhật trạng thái đơn hàng thành công!'),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-            ),
+        if (updatedOrderDetail != null) {
+          setState(() {
+            _order = updatedOrderDetail;
+          });
+          
+          // Gọi callback để reload danh sách đơn hàng
+          widget.onOrderUpdated?.call();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Đã cập nhật trạng thái đơn hàng thành công!'),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        } else {
+          // Nếu không lấy được dữ liệu mới, cập nhật local
+          final updatedOrder = Order(
+            id: _order!.id,
+            customerId: _order!.customerId,
+            customerName: _order!.customerName,
+            createdBy: _order!.createdBy,
+            createdAt: _order!.createdAt,
+            status: selectedStatus,
+            note: _order!.note,
+            devices: _order!.devices,
+            deviceCount: _order!.deviceCount,
           );
+          
+          setState(() {
+            _order = updatedOrder;
+          });
+          
+          // Gọi callback để reload danh sách đơn hàng
+          widget.onOrderUpdated?.call();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Đã cập nhật trạng thái đơn hàng thành công!'),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
         }
       } else {
         if (mounted) {
@@ -376,6 +839,12 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
         actions: [
+          // Icon chia sẻ/tải PDF
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'Chia sẻ/Tải PDF',
+            onPressed: _showPdfOptions,
+          ),
           // Icon QR để xem QR code của Order ID
           IconButton(
             icon: const Icon(Icons.qr_code),
@@ -396,7 +865,7 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
             TextButton(
               onPressed: _deactivateOrder,
               child: const Text(
-                'Deactive',
+                'Hủy',
                 style: TextStyle(color: Colors.white),
               ),
             ),
@@ -450,12 +919,12 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
                                       style: Theme.of(context).textTheme.headlineSmall,
                                     ),
                                     const SizedBox(height: 16),
-                                    _buildInfoRow('ID đơn hàng:', _order!.id),
                                     _buildInfoRow('Khách hàng:', _order!.customerId),
                                     _buildInfoRow('Người tạo:', _order!.createdBy),
-                                    _buildInfoRow('Ngày tạo:', _order!.createdAt.toString().substring(0, 16)),
-                                    _buildInfoRow('Số lượng Device:', _order!.devices.length.toString()),
-                                    _buildInfoRow('Ghi chú:', _order!.note ?? 'Không có'),
+                                    _buildInfoRow('Ngày tạo:', _formatDateTime(_order!.createdAt)),
+                                    _buildInfoRow('Số lượng thiết bị:', _order!.devices.length.toString()),
+                                    if (_order!.note != null && _order!.note!.isNotEmpty)
+                                      _buildInfoRow('Ghi chú:', _order!.note!),
                                     const SizedBox(height: 16),
                                     Row(
                                       children: [
@@ -468,125 +937,176 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
                                             borderRadius: BorderRadius.circular(8),
                                           ),
                                           child: Text(
-                                            _order!.status == 'pending' ? 'Chờ xử lý' :
-                                            _order!.status == 'completed' ? 'Hoàn thành' : 'Đã hủy',
+                                            _order!.status == 'pending' ? 'Chờ thanh toán' :
+                                            _order!.status == 'completed' ? 'Thanh toán' : 'Đã hủy',
                                             style: const TextStyle(color: Colors.white),
                                           ),
                                         ),
-                                        const SizedBox(width: 12),
-                                        if (!_isUpdatingStatus)
-                                          ElevatedButton.icon(
-                                            onPressed: _order!.status == 'deactivated' ? null : _updateOrderStatus,
-                                            icon: const Icon(Icons.edit, size: 16),
-                                            label: const Text('Cập nhật'),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: _order!.status == 'deactivated' ? Colors.grey : Colors.blue,
-                                              foregroundColor: Colors.white,
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                            ),
-                                          )
-                                        else
-                                          const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          ),
                                       ],
                                     ),
+                                    const SizedBox(height: 8),
+                                  if (!_isUpdatingStatus)
+                                      Center(
+                                        child: ElevatedButton.icon(
+                                          onPressed: _order!.status == 'deactivated' ? null : _updateOrderStatus,
+                                          icon: const Icon(Icons.edit, size: 16),
+                                          label: const Text('Cập nhật trạng thái'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: _order!.status == 'deactivated' ? Colors.grey : Colors.blue,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      const Center(
+                                        child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
                             ),
                             const SizedBox(height: 16),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                            Text(
-                                  'Devices: (${_order!.devices.length})',
-                                  style: Theme.of(context).textTheme.titleMedium,
+                                Expanded(
+                                  child: Text(
+                                    'Thiết bị: (${_order!.devices.length})',
+                                    style: Theme.of(context).textTheme.titleMedium,
+                                  ),
                                 ),
-                                Row(
-                                  children: [
-                                    if (_selectedDevices.isNotEmpty)
-                                      ElevatedButton.icon(
-                                        onPressed: _shareSelectedQRCodes,
-                                        icon: const Icon(Icons.share, size: 16),
-                                        label: Text('Chia sẻ (${_selectedDevices.length})'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.green,
-                                          foregroundColor: Colors.white,
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        ),
-                                      ),
-                                    const SizedBox(width: 8),
-                                    TextButton.icon(
-                                      onPressed: _toggleSelectAll,
-                                      icon: Icon(_selectAll ? Icons.check_box : Icons.check_box_outline_blank),
-                                      label: Text(_selectAll ? 'Bỏ chọn' : 'Tất cả'),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.deepPurple,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+
                               ],
                             ),
                             const SizedBox(height: 8),
-                            ..._order!.devices.map((device) => Card(
-                              child: ListTile(
-                                leading: Padding(
-                                  padding: const EdgeInsets.all(4.0),
-                                  child: Checkbox(
-                                    value: _selectedDevices.contains(device.macAddress),
-                                    onChanged: (bool? value) {
-                                      _toggleDeviceSelection(device.macAddress);
-                                    },
-                                    activeColor: Colors.deepPurple,
-                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                ),
-                                title: Text(device.macAddress, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('SKU: ${device.skuCode}'),
-                                    Text('Payment: ${device.paymentStatus}'),
-                                    const SizedBox(height: 4),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: device.isActive ? Colors.green : Colors.red,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        device.isActive ? 'Kích hoạt' : 'Chưa kích hoạt',
-                                        style: const TextStyle(color: Colors.white, fontSize: 10),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                trailing: const Icon(Icons.qr_code),
-                                onTap: () {
-                                  // Navigate to QR screen showing QR code generated from MAC address
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => DeviceQrScreen(
-                                        device: device,
-                                        macAddress: device.macAddress,
-                                        onDeviceUpdated: _loadOrderDetail,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            )),
+                            ..._buildGroupedDevices(),
                           ],
                         ),
                       ),
                     ),
     );
   }
+
+  List<Widget> _buildGroupedDevices() {
+    final widgets = <Widget>[];
+    
+    // Nhóm thiết bị theo skuCatalog.name
+    final Map<String, List<Device>> groupedDevices = {};
+    
+    for (final device in _order!.devices) {
+      final groupName = device.skuCatalog?.name ?? 'Thiết bị khác';
+      if (!groupedDevices.containsKey(groupName)) {
+        groupedDevices[groupName] = [];
+      }
+      groupedDevices[groupName]!.add(device);
+    }
+    
+    // Tạo widget cho từng nhóm
+    groupedDevices.forEach((groupName, devices) {
+      // Khởi tạo trạng thái mở/đóng mặc định (mở để giữ trải nghiệm cũ)
+      _groupExpanded.putIfAbsent(groupName, () => true);
+
+      widgets.add(
+        Card(
+          margin: const EdgeInsets.only(top: 12, bottom: 8),
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              initiallyExpanded: _groupExpanded[groupName] ?? true,
+              onExpansionChanged: (expanded) {
+                setState(() {
+                  _groupExpanded[groupName] = expanded;
+                });
+              },
+              leading: const Icon(Icons.category, color: Colors.deepPurple),
+              title: Text(
+                '$groupName (${devices.length} thiết bị)',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.deepPurple,
+                ),
+              ),
+              children: [
+                ...devices.map((device) => Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: ListTile(
+                        title: CopyableText(
+                          text: device.macAddress,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          copyMessage: 'Đã copy MAC Address',
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CopyableText(
+                              text: 'Mã sản phẩm: ${device.skuCode}',
+                              style: const TextStyle(fontSize: 12),
+                              copyMessage: 'Đã copy SKU Code',
+                            ),
+                            if (device.skuCatalog?.description != null && device.skuCatalog!.description!.isNotEmpty)
+                              Text(
+                                'Mô tả: ${device.skuCatalog!.description}',
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: device.isActive ? Colors.green : Colors.red,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                device.isActive ? 'Kích hoạt' : 'Chưa kích hoạt',
+                                style: const TextStyle(color: Colors.white, fontSize: 10),
+                              ),
+                            ),
+                          ],
+                        ),
+                        trailing: const Icon(Icons.qr_code),
+                        onTap: () {
+                          // Kiểm tra trạng thái đơn hàng và payment status
+                          if (_order!.status == 'pending' && device.paymentStatus == 'pending') {
+                            // Nếu đơn hàng đang chờ thanh toán và device cũng chờ thanh toán thì không cho phép click
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Không thể xem QR code khi đơn hàng đang chờ thanh toán'),
+                                backgroundColor: Colors.orange,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            return;
+                          }
+                          
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DeviceQrScreen(
+                                device: device,
+                                macAddress: device.macAddress,
+                                onDeviceUpdated: _loadOrderDetail,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    )),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      );
+    });
+    
+    return widgets;
+  }
+
+
 
   Widget _buildInfoRow(String label, String value) {
     return Padding(
@@ -602,7 +1122,10 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
             ),
           ),
           Expanded(
-            child: Text(value),
+            child: CopyableText(
+              text: value,
+              copyMessage: 'Đã copy $label',
+            ),
           ),
         ],
       ),
@@ -651,13 +1174,26 @@ class _QRCodeShareDialogState extends State<_QRCodeShareDialog> {
               ],
             )
           else if (_isSharing)
-            const Column(
+            Column(
               children: [
-                CircularProgressIndicator(
+                const CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
                 ),
-                SizedBox(height: 16),
-                Text('Đang chia sẻ...'),
+                const SizedBox(height: 16),
+                Text(kIsWeb 
+                  ? widget.devices.length == 1 
+                    ? 'Đang tạo QR code...' 
+                    : 'Đang tạo file ZIP...'
+                  : 'Đang chia sẻ...'),
+                if (kIsWeb) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.devices.length == 1 
+                      ? 'QR code sẽ được tải về máy'
+                      : 'Tất cả QR codes sẽ được gom vào 1 file ZIP',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
               ],
             )
           else
@@ -730,9 +1266,12 @@ class _QRCodeShareDialogState extends State<_QRCodeShareDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(kIsWeb 
-              ? 'Đã tải ${widget.devices.length} QR code về máy!' 
+              ? widget.devices.length == 1 
+                ? 'Đã tải QR code về máy!' 
+                : 'Đã tải file ZIP chứa ${widget.devices.length} QR code về máy!'
               : 'Đã chia sẻ ${widget.devices.length} QR code'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -756,9 +1295,16 @@ class _QRCodeShareDialogState extends State<_QRCodeShareDialog> {
     final qrPainter = QrPainter(
       data: data,
       version: QrVersions.auto,
-      color: Colors.black,
-      emptyColor: Colors.white,
       gapless: false,
+      dataModuleStyle: const QrDataModuleStyle(
+        dataModuleShape: QrDataModuleShape.square,
+        color: Color(0xFF000000),
+      ),
+      eyeStyle: const QrEyeStyle(
+        eyeShape: QrEyeShape.square,
+        color: Color(0xFF000000),
+      ),
+      errorCorrectionLevel: QrErrorCorrectLevel.M,
     );
 
     final qrImage = await qrPainter.toImageData(200.0);

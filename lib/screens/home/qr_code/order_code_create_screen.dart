@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../models/order.dart';
 import '../../../models/device.dart';
 import '../../../models/user.dart';
 import '../../../services/api_service.dart';
@@ -26,8 +25,9 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
   // Danh sách agents từ API
   List<User> _agents = [];
 
-  // Email người tạo (lấy từ user login)
+  // Thông tin người tạo (lấy từ user login)
   String? _currentUserEmail;
+  String? _currentUserName;
 
   // Email khách hàng/đại lý được chọn
   String? _selectedCustomerEmail;
@@ -36,8 +36,6 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
   final List<Map<String, String>> _paymentStatuses = [
     {'value': 'free', 'name': 'Miễn phí'},
     {'value': 'paid', 'name': 'Đã thanh toán'},
-    {'value': 'pending', 'name': 'Chờ thanh toán'},
-    {'value': 'cancelled', 'name': 'Đã hủy'},
   ];
 
   @override
@@ -52,25 +50,26 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
     });
 
     try {
-      // Lấy email user hiện tại
+      // Lấy thông tin user hiện tại
       _currentUserEmail = await ApiService.getCurrentUserEmail();
+      final currentUser = await ApiService.getCurrentUser();
+      _currentUserName = currentUser?['name'];
       
-      // Lấy danh sách agents từ API với role=AGENT
+      // Lấy danh sách agents từ API với role=AGENT và chỉ lấy trạng thái ACTIVE
       final agents = await ApiService.getAllUsers(role: 'AGENT');
+      final activeAgents = agents.where((a) => a.status.toUpperCase() == 'ACTIVE').toList();
       
       // Lấy danh sách device types từ API
       final deviceTypes = await ApiService.getDeviceTypes();
       
       setState(() {
-        _agents = agents;
+        _agents = activeAgents;
         _products = deviceTypes;
-        // Thêm device đầu tiên mặc định nếu có sản phẩm
-        if (_products.isNotEmpty) {
-          _addDevice();
-        }
+        // Không thêm sản phẩm mặc định, người dùng phải tự thêm
       });
     } catch (e) {
       if (mounted) {
+        print('Lỗi khi tải dữ liệu: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Lỗi khi tải dữ liệu: $e'),
@@ -98,11 +97,9 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
   }
 
   void _removeDevice(int index) {
-    if (_devices.length > 1) {
       setState(() {
         _devices.removeAt(index);
       });
-    }
   }
 
   void _updateDevice(int index, String? skuCode, int? quantity, String? paymentStatus) {
@@ -128,6 +125,15 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Vui lòng chọn email khách hàng/đại lý!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (_devices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng thêm ít nhất một sản phẩm!'),
           backgroundColor: Colors.red,
         ),
       );
@@ -227,7 +233,7 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
                         items: _agents.map((agent) {
                           return DropdownMenuItem<String>(
                             value: agent.email,
-                            child: Text('${agent.email} - ${agent.name}'),
+                            child: Text(agent.name),
                           );
                         }).toList(),
                         onChanged: (value) {
@@ -236,7 +242,7 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
                           });
                         },
                         decoration: const InputDecoration(
-                          labelText: 'Email khách hàng/đại lý',
+                          labelText: 'Đại lý',
                           hintText: 'Chọn đại lý',
                           border: OutlineInputBorder(),
                         ),
@@ -277,7 +283,7 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
                                     ),
                                   ),
                                   Text(
-                                    _currentUserEmail ?? 'Không xác định',
+                                    _currentUserName ?? _currentUserEmail ?? 'Không xác định',
                                     style: const TextStyle(fontSize: 14),
                                   ),
                                 ],
@@ -303,16 +309,18 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'Danh sách sản phẩm',
+                            'Sản phẩm:',
                             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           ElevatedButton.icon(
                             onPressed: _addDevice,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Thêm sản phẩm'),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Thêm', style: TextStyle(fontSize: 12)),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green,
                               foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              minimumSize: const Size(0, 32),
                             ),
                           ),
                         ],
@@ -325,6 +333,38 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
                             child: Text(
                               'Không có sản phẩm nào khả dụng',
                               style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        )
+                      else if (_devices.isEmpty)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: 48,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Chưa có sản phẩm nào',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Nhấn "Thêm" để bắt đầu',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         )
@@ -345,7 +385,6 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
                                         'Sản phẩm ${index + 1}',
                                         style: const TextStyle(fontWeight: FontWeight.bold),
                                       ),
-                                      if (_devices.length > 1)
                                         IconButton(
                                           onPressed: () => _removeDevice(index),
                                           icon: const Icon(Icons.delete, color: Colors.red),
@@ -359,19 +398,20 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
                                     items: _products.map((product) {
                                       return DropdownMenuItem<String>(
                                         value: product['skuCode'] as String? ?? '',
-                                        child: Text('${product['skuCode']} - ${product['name'] ?? 'Không có tên'}'),
+                                        child: Text(product['name'] ?? 'Không có tên'),
                                       );
                                     }).toList(),
                                     onChanged: (value) => _updateDevice(index, value, null, null),
                                     decoration: const InputDecoration(
-                                      labelText: 'Mã sản phẩm (SKU)',
+                                      labelText: 'Chọn sản phẩm',
                                       border: OutlineInputBorder(),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
                                   Row(
                                     children: [
-                                      Expanded(
+                                      Flexible(
+                                        flex: 1,
                                         child: TextFormField(
                                           initialValue: device.quantity.toString(),
                                           decoration: const InputDecoration(
@@ -395,7 +435,8 @@ class _OrderCodeCreateScreenState extends State<OrderCodeCreateScreen> {
                                         ),
                                       ),
                                       const SizedBox(width: 12),
-                                      Expanded(
+                                      Flexible(
+                                        flex: 2,
                                         child: DropdownButtonFormField<String>(
                                           value: device.paymentStatus,
                                           items: _paymentStatuses.map((status) {

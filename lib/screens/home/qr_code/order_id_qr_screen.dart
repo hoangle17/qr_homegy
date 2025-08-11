@@ -11,6 +11,7 @@ import 'package:image/image.dart' as img;
 import 'package:media_store_plus/media_store_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import '../../../widgets/copyable_text.dart';
 import 'qr_save_web.dart'
     if (dart.library.io) 'qr_save_mobile.dart';
 
@@ -273,7 +274,7 @@ class _OrderIdQrScreenState extends State<OrderIdQrScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              // Thông tin Order ID
+              // Thông tin Order ID có thể copy
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -286,28 +287,38 @@ class _OrderIdQrScreenState extends State<OrderIdQrScreen> {
                       'Thông tin đơn hàng',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(
-                          width: 80,
-                          child: Text(
-                            'Order ID:',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(widget.orderId),
-                        ),
-                      ],
-                    ),
+                    const SizedBox(height: 16),
+                    _buildInfoRow('Mã đơn hàng:', widget.orderId),
                   ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: CopyableText(
+              text: value,
+              copyMessage: 'Đã copy $label',
+            ),
+          ),
+        ],
       ),
     );
   }

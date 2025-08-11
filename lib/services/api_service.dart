@@ -6,7 +6,7 @@ import '../models/device.dart';
 import '../models/user.dart';
 
 class ApiService {
-  static const String baseUrl = "http://vps2025.homegy.com.vn:3000";
+  static const String baseUrl = "https://vps2025.homegy.com.vn";
 
   static Future<http.Response> callApi({
     required String apiName,
@@ -15,7 +15,7 @@ class ApiService {
     Map<String, String>? headers,
     dynamic body,
   }) async {
-    print('---[API: $apiName]---');
+    print('---[API: $apiName]---'); 
     print('[$method] $url');
     if (headers != null) print('Headers: $headers');
     if (body != null) print('Request body: $body');
@@ -59,14 +59,16 @@ class ApiService {
       body: jsonEncode({'email': email, 'password': password}),
     );
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return {
-        'token': data['token'] ?? data['accessToken'],
-        'user': data['user'],
-      };
-    } else {
-      return null;
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final data = responseData['data'];
+        return {
+          'token': data['token'] ?? data['accessToken'],
+          'user': data['user'],
+        };
+      }
     }
+    return null;
   }
 
   static Future<Map<String, dynamic>> changePassword(String currentPassword, String newPassword) async {
@@ -91,19 +93,11 @@ class ApiService {
       }),
     );
     
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return {
-        'success': true,
-        'message': data['message'] ?? 'Đổi mật khẩu thành công'
-      };
-    } else {
-      final data = jsonDecode(response.body);
-      return {
-        'success': false,
-        'message': data['message'] ?? 'Đổi mật khẩu thất bại'
-      };
-    }
+    final responseData = jsonDecode(response.body);
+    return {
+      'success': responseData['success'] ?? false,
+      'message': responseData['message'] ?? 'Đổi mật khẩu thất bại'
+    };
   }
 
   static Future<List<Map<String, dynamic>>> getMacDevices() async {
@@ -120,9 +114,10 @@ class ApiService {
       },
     );
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      if (data['success'] == true && data['data'] is List) {
-        return List<Map<String, dynamic>>.from(data['data']);
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final devicesData = responseData['data']['devices'] as List<dynamic>? ?? [];
+        return List<Map<String, dynamic>>.from(devicesData);
       }
     }
     return [];
@@ -138,7 +133,8 @@ class ApiService {
       body: jsonEncode({'email': email}),
     );
     if (response.statusCode == 200) {
-      return true;
+      final responseData = jsonDecode(response.body);
+      return responseData['success'] ?? false;
     } else {
       return false;
     }
@@ -173,21 +169,24 @@ class ApiService {
     );
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-      final data = jsonDecode(response.body);
-      // Tạo Order từ response data
-      return Order(
-        id: data['order_id'] ?? '',
-        customerId: customerId,
-        customerName: '', // Cần lấy từ customer service
-        createdBy: createdBy,
-        createdAt: DateTime.now(),
-        status: 'pending',
-        note: note,
-        devices: (data['devices'] as List<dynamic>? ?? [])
-            .map((d) => Device.fromJson(d))
-            .toList(),
-        deviceCount: (data['devices'] as List<dynamic>? ?? []).length,
-      );
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final data = responseData['data'];
+        // Tạo Order từ response data
+        return Order(
+          id: data['order_id'] ?? '',
+          customerId: customerId,
+          customerName: '', // Cần lấy từ customer service
+          createdBy: createdBy,
+          createdAt: DateTime.now(),
+          status: 'pending',
+          note: note,
+          devices: (data['devices'] as List<dynamic>? ?? [])
+              .map((d) => Device.fromJson(d))
+              .toList(),
+          deviceCount: (data['devices'] as List<dynamic>? ?? []).length,
+        );
+      }
     }
     return null;
   }
@@ -221,10 +220,11 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return (data['orders'] as List<dynamic>? ?? [])
-          .map((o) => Order.fromJson(o))
-          .toList();
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final ordersData = responseData['data']['orders'] as List<dynamic>? ?? [];
+        return ordersData.map((o) => Order.fromJson(o)).toList();
+      }
     }
     return [];
   }
@@ -245,8 +245,19 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return Order.fromJson(data);
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final data = responseData['data'];
+        // Tạo order object từ order data và deviceInventories
+        final orderData = data['order'] ?? data;
+        final deviceInventories = data['deviceInventories'] ?? [];
+        
+        // Merge order data với deviceInventories
+        final mergedData = Map<String, dynamic>.from(orderData);
+        mergedData['deviceInventories'] = deviceInventories;
+        
+        return Order.fromJson(mergedData);
+      }
     }
     return null;
   }
@@ -267,10 +278,11 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return (data['orders'] as List<dynamic>? ?? [])
-          .map((o) => Order.fromJson(o))
-          .toList();
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final ordersData = responseData['data']['orders'] as List<dynamic>? ?? [];
+        return ordersData.map((o) => Order.fromJson(o)).toList();
+      }
     }
     return [];
   }
@@ -292,7 +304,11 @@ class ApiService {
       body: jsonEncode({'status': status}),
     );
 
-    return response.statusCode == 200;
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      return responseData['success'] ?? false;
+    }
+    return false;
   }
 
   static Future<bool> deactivateOrder(String orderId) async {
@@ -310,7 +326,11 @@ class ApiService {
       },
     );
 
-    return response.statusCode == 200;
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      return responseData['success'] ?? false;
+    }
+    return false;
   }
 
   static Future<bool> deactivateDevice(String macAddress) async {
@@ -328,7 +348,11 @@ class ApiService {
       },
     );
 
-    return response.statusCode == 200;
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      return responseData['success'] ?? false;
+    }
+    return false;
   }
 
   static Future<List<Map<String, dynamic>>> getDeviceTypes() async {
@@ -347,8 +371,11 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return List<Map<String, dynamic>>.from(data);
+      final responseData = jsonDecode(response.body);
+      // API này trả về array trực tiếp, không có wrapper success/data
+      if (responseData is List) {
+        return List<Map<String, dynamic>>.from(responseData);
+      }
     }
     return [];
   }
@@ -388,20 +415,23 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final user = User.fromJson(data);
-      
-      // Update user info in SharedPreferences
-      await prefs.setString('user_info', jsonEncode(data));
-      await prefs.setString('user_email', user.email);
-      
-      return user;
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final user = User.fromJson(responseData['data']);
+        
+        // Update user info in SharedPreferences
+        await prefs.setString('user_info', jsonEncode(responseData['data']));
+        await prefs.setString('user_email', user.email);
+        
+        return user;
+      }
     }
     return null;
   }
 
   // Update user profile
   static Future<Map<String, dynamic>> updateUserProfile({
+    String? id,
     String? name,
     String? phone,
     String? address,
@@ -415,6 +445,7 @@ class ApiService {
     
     // Only include fields that are provided (not null)
     final Map<String, dynamic> requestBody = {};
+    if (id != null) requestBody['id'] = id;
     if (name != null) requestBody['name'] = name;
     if (phone != null) requestBody['phone'] = phone;
     if (address != null) requestBody['address'] = address;
@@ -432,20 +463,53 @@ class ApiService {
       body: jsonEncode(requestBody),
     );
     
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return {
-        'success': true,
-        'message': 'Cập nhật thông tin thành công',
-        'data': data,
-      };
-    } else {
-      final data = jsonDecode(response.body);
-      return {
-        'success': false,
-        'message': data['message'] ?? 'Cập nhật thông tin thất bại',
-      };
+    final responseData = jsonDecode(response.body);
+    return {
+      'success': responseData['success'] ?? false,
+      'message': responseData['message'] ?? 'Cập nhật thông tin thất bại',
+      'data': responseData['data'],
+    };
+  }
+
+  // Update agent profile with new API format
+  static Future<Map<String, dynamic>> updateAgentProfile({
+    required String currentName,
+    required String name,
+    required String region,
+    required String phone,
+    String? email,
+    String? status,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+    if (token == null) {
+      return {'success': false, 'message': 'Không tìm thấy token xác thực'};
     }
+    
+    final url = '$baseUrl/api/users/agent/$currentName';
+    final response = await callApi(
+      apiName: 'UpdateAgentProfile',
+      method: 'PATCH',
+      url: url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'name': name,
+        'region': region,
+        'phone': phone,
+        if (email != null) 'email': email,
+        if (status != null) 'status': status,
+      }),
+    );
+    
+    final responseData = jsonDecode(response.body);
+    return {
+      'success': responseData['success'] ?? false,
+      'message': responseData['message'] ?? 'Cập nhật thông tin thất bại',
+      'data': responseData['data'],
+    };
   }
 
   // Update user role (only for ADMIN)
@@ -473,20 +537,12 @@ class ApiService {
       }),
     );
     
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return {
-        'success': true,
-        'message': 'Cập nhật vai trò thành công',
-        'data': data,
-      };
-    } else {
-      final data = jsonDecode(response.body);
-      return {
-        'success': false,
-        'message': data['message'] ?? 'Cập nhật vai trò thất bại',
-      };
-    }
+    final responseData = jsonDecode(response.body);
+    return {
+      'success': responseData['success'] ?? false,
+      'message': responseData['message'] ?? 'Cập nhật vai trò thất bại',
+      'data': responseData['data'],
+    };
   }
 
   // User APIs
@@ -510,10 +566,11 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return (data as List<dynamic>? ?? [])
-          .map((u) => User.fromJson(u))
-          .toList();
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final usersData = responseData['data'] as List<dynamic>? ?? [];
+        return usersData.map((u) => User.fromJson(u)).toList();
+      }
     }
     return [];
   }
@@ -523,7 +580,9 @@ class ApiService {
     required String email,
     required String password,
     required String name,
+    String phone = '',
     String region = 'VN',
+    String role = 'USER',
   }) async {
     final response = await callApi(
       apiName: 'RegisterUser',
@@ -536,24 +595,18 @@ class ApiService {
         'email': email,
         'password': password,
         'name': name,
+        'phone': phone,
         'region': region,
+        'role': role,
       }),
     );
 
-    if (response.statusCode == 201) {
-      final data = jsonDecode(response.body);
-      return {
-        'success': true,
-        'message': 'Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản.',
-        'data': data,
-      };
-    } else {
-      final errorData = jsonDecode(response.body);
-      return {
-        'success': false,
-        'message': errorData['message'] ?? 'Lỗi khi đăng ký',
-      };
-    }
+    final responseData = jsonDecode(response.body);
+    return {
+      'success': responseData['success'] ?? false,
+      'message': responseData['message'] ?? 'Lỗi khi đăng ký',
+      'data': responseData['data'],
+    };
   }
 
   static Future<Device?> getDeviceByMacAddress(String macAddress) async {
@@ -571,9 +624,9 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      if (data['success'] == true && data['data'] != null) {
-        return Device.fromJson(data['data']);
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        return Device.fromJson(responseData['data']);
       }
     }
     return null;
@@ -594,14 +647,101 @@ class ApiService {
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      if (data['success'] == true && data['data'] != null) {
-        return (data['data'] as List<dynamic>)
-            .map((device) => Device.fromJson(device))
-            .toList();
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final devicesData = responseData['data']['devices'] as List<dynamic>? ?? [];
+        return devicesData.map((device) => Device.fromJson(device)).toList();
       }
     }
     return [];
+  }
+
+  // Inventory devices with pagination and counters
+  // Returns a map: {
+  //  'devices': List<Device>, 'total': int, 'activeCount': int,
+  //  'page': int, 'limit': int, 'totalPages': int
+  // }
+  static Future<Map<String, dynamic>> getInventoryDevices({
+    int page = 1,
+    int limit = 20,
+    bool? isActive,
+    DateTime? fromDate,
+    DateTime? toDate,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+    if (token == null) {
+      return {
+        'devices': <Device>[],
+        'total': 0,
+        'activeCount': 0,
+        'page': page,
+        'limit': limit,
+        'totalPages': 0,
+      };
+    }
+
+    final Map<String, String> qp = {
+      'page': page.toString(),
+      'limit': limit.toString(),
+    };
+    if (isActive != null) {
+      qp['isActive'] = isActive.toString();
+    }
+    if (fromDate != null) {
+      qp['from_date'] = fromDate.toIso8601String().split('T')[0];
+    }
+    if (toDate != null) {
+      qp['to_date'] = toDate.toIso8601String().split('T')[0];
+    }
+
+    final uri = Uri.parse('$baseUrl/api/inventory/devices').replace(
+      queryParameters: qp,
+    );
+
+    final response = await callApi(
+      apiName: 'GetInventoryDevices',
+      method: 'GET',
+      url: uri.toString(),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true) {
+        final dataField = responseData['data'];
+        List<Device> devices;
+        if (dataField is List) {
+          devices = dataField.map<Device>((d) => Device.fromJson(d)).toList();
+        } else if (dataField is Map && dataField['devices'] is List) {
+          devices = (dataField['devices'] as List)
+              .map<Device>((d) => Device.fromJson(d))
+              .toList();
+        } else {
+          devices = <Device>[];
+        }
+
+        return {
+          'devices': devices,
+          'total': responseData['total'] ?? (dataField?['total'] ?? 0),
+          'activeCount': responseData['activeCount'] ?? (dataField?['activeCount'] ?? 0),
+          'page': responseData['page'] ?? page,
+          'limit': responseData['limit'] ?? limit,
+          'totalPages': responseData['totalPages'] ?? (dataField?['totalPages'] ?? 0),
+        };
+      }
+    }
+
+    return {
+      'devices': <Device>[],
+      'total': 0,
+      'activeCount': 0,
+      'page': page,
+      'limit': limit,
+      'totalPages': 0,
+    };
   }
 
   static Future<bool> deleteUser(String userId) async {
@@ -618,7 +758,41 @@ class ApiService {
       },
     );
 
-    return response.statusCode == 204;
+    if (response.statusCode == 204) {
+      return true;
+    } else if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      return responseData['success'] ?? false;
+    }
+    return false;
+  }
+
+  // Delete agent by identifier (name, email, or phone)
+  static Future<Map<String, dynamic>> deleteAgent(String identifier) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+    if (token == null) {
+      return {'success': false, 'message': 'Không tìm thấy token xác thực'};
+    }
+
+    final response = await callApi(
+      apiName: 'DeleteAgent',
+      method: 'DELETE',
+      url: '$baseUrl/api/users/agent/$identifier',
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    final responseData = jsonDecode(response.body);
+    
+    // Xử lý cả trường hợp thành công và lỗi
+    return {
+      'success': responseData['success'] ?? false,
+      'message': responseData['message'] ?? 'Xóa agent thất bại',
+      'data': responseData['data'],
+      'error': responseData['error'], // Thêm thông tin lỗi chi tiết
+    };
   }
 }
  

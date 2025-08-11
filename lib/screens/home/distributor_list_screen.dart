@@ -3,6 +3,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import '../../services/api_service.dart';
 import '../../models/user.dart';
 import 'distributor_form_screen.dart';
+import 'user_add_screen.dart';
 
 class DistributorListScreen extends StatefulWidget {
   const DistributorListScreen({super.key});
@@ -78,14 +79,15 @@ class _DistributorListScreenState extends State<DistributorListScreen> {
     }).toList();
   }
 
-  void _showAddUserDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => const AddUserDialog(),
-    ).then((_) {
-      // Reload users list after adding new user
-      _loadUsers();
-    });
+  void _showAddUserScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserAddScreen(
+          onUserAdded: _loadUsers,
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmDeleteUser(User user) async {
@@ -239,20 +241,20 @@ class _DistributorListScreenState extends State<DistributorListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Danh sách người dùng'),
+        title: const Text('Danh sách tài khoản'),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
         actions: [
           if (_hasAccess) ...[
+            // IconButton(
+            //   icon: const Icon(Icons.add),
+            //   tooltip: 'Thêm tài khoản mới',
+            //   onPressed: _showAddUserScreen,
+            // ),
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Làm mới',
               onPressed: _loadUsers,
-            ),
-          IconButton(
-            icon: const Icon(Icons.add),
-              tooltip: 'Thêm người dùng mới',
-              onPressed: () => _showAddUserDialog(),
             ),
           ],
         ],
@@ -492,187 +494,11 @@ class _DistributorListScreenState extends State<DistributorListScreen> {
       case 'AGENT':
         return 'Đại lý';
       case 'USER':
-        return 'Người dùng';
+        return 'Khách lẻ';
       default:
         return role;
     }
   }
 }
 
-class AddUserDialog extends StatefulWidget {
-  const AddUserDialog({super.key});
-
-  @override
-  State<AddUserDialog> createState() => _AddUserDialogState();
-}
-
-class _AddUserDialogState extends State<AddUserDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
-  bool _isLoading = false;
-  bool _obscurePassword = true;
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _registerUser() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final result = await ApiService.registerUser(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        name: _nameController.text.trim(),
-      );
-
-      if (result['success']) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message']),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pop(context);
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message']),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Thêm người dùng mới'),
-      content: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Tên người dùng',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Vui lòng nhập tên người dùng';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email),
-                ),
-                keyboardType: TextInputType.emailAddress,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Vui lòng nhập email';
-                  }
-                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                    return 'Email không hợp lệ';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                decoration: InputDecoration(
-                  labelText: 'Mật khẩu',
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.lock),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
-                ),
-                obscureText: _obscurePassword,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Vui lòng nhập mật khẩu';
-                  }
-                  if (value.length < 6) {
-                    return 'Mật khẩu phải có ít nhất 6 ký tự';
-                  }
-                  return null;
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: const Text('Hủy'),
-        ),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _registerUser,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.deepPurple,
-            foregroundColor: Colors.white,
-          ),
-          child: _isLoading
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : const Text('Đăng ký'),
-        ),
-      ],
-    );
-  }
-} 
+ 

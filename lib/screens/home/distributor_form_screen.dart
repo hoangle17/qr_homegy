@@ -28,7 +28,7 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
     _tabController = TabController(length: 2, vsync: this);
     _nameController = TextEditingController(text: widget.user?.name ?? '');
     _emailController = TextEditingController(text: widget.user?.email ?? '');
-    _addressController = TextEditingController(text: widget.user?.address ?? '');
+    _addressController = TextEditingController(text: widget.user?.region ?? '');
     _phoneController = TextEditingController(text: widget.user?.phone ?? '');
     _role = widget.user?.role;
     _checkUserPermissions();
@@ -488,8 +488,10 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
             items: const [
               DropdownMenuItem(value: 'ADMIN', child: Text('Quản trị viên')),
               DropdownMenuItem(value: 'SUB_ADMIN', child: Text('Phó quản trị')),
+              DropdownMenuItem(value: 'DISTRIBUTOR', child: Text('Nhà phân phối')),
               DropdownMenuItem(value: 'AGENT', child: Text('Đại lý')),
               DropdownMenuItem(value: 'USER', child: Text('Người dùng')),
+              DropdownMenuItem(value: 'CUSTOMER', child: Text('Khách lẻ'))
             ],
             onChanged: _canChangeRole ? (value) => setState(() => _role = value) : null,
             decoration: InputDecoration(
@@ -561,6 +563,8 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
         return Colors.red;
       case 'SUB_ADMIN':
         return Colors.orange;
+      case 'DISTRIBUTOR':
+        return Colors.purple;
       case 'AGENT':
         return Colors.blue;
       case 'USER':
@@ -576,6 +580,8 @@ class _DistributorFormScreenState extends State<DistributorFormScreen> with Sing
         return 'Quản trị viên';
       case 'SUB_ADMIN':
         return 'Phó quản trị';
+      case 'DISTRIBUTOR':
+        return 'Nhà phân phối';
       case 'AGENT':
         return 'Đại lý';
       case 'USER':

@@ -1,7 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:media_store_plus/media_store_plus.dart';
+import 'package:intl/intl.dart';
+
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import '../../../models/order.dart';
 import '../../../services/api_service.dart';
+import '../../../widgets/copyable_text.dart';
 import 'order_code_detail_screen.dart';
+import 'qr_save_web.dart'
+    if (dart.library.io) 'qr_save_mobile.dart';
 
 class OrderSearchScreen extends StatefulWidget {
   const OrderSearchScreen({super.key});
@@ -21,6 +35,19 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
   bool _isLoading = false;
   List<Order> _searchResults = [];
   bool _useGeneralSearch = false;
+
+  // Helper function to format date in HH:mm dd/MM/yyyy format
+  String _formatDateTime(DateTime dateTime) {
+    return DateFormat('HH:mm dd/MM/yyyy').format(dateTime);
+  }
+
+  // Helper function to format date only in dd-MM-yyyy format (for date picker)
+  String _formatDateOnly(DateTime dateTime) {
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final year = dateTime.year.toString();
+    return '$day-$month-$year';
+  }
 
   // Danh sách trạng thái đơn hàng
   final List<Map<String, String?>> _statuses = [
@@ -87,6 +114,22 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
     });
   }
 
+  void _switchMode(bool general) {
+    // Reset all inputs and results when switching modes
+    _formKey.currentState?.reset();
+    _queryController.clear();
+    _customerIdController.clear();
+    _createdByController.clear();
+    _fromDate = null;
+    _toDate = null;
+    _selectedStatus = null;
+    setState(() {
+      _useGeneralSearch = general;
+      _isLoading = false;
+      _searchResults.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -96,6 +139,12 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
         actions: [
+          if (_searchResults.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf),
+              tooltip: 'Chia sẻ/Tải PDF',
+              onPressed: _showPdfOptions,
+            ),
           IconButton(
             icon: const Icon(Icons.clear),
             tooltip: 'Xóa tìm kiếm',
@@ -113,7 +162,7 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
                 color: Colors.white,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.2),
+                    color: Colors.grey.withValues(alpha: 0.2),
                     spreadRadius: 1,
                     blurRadius: 3,
                     offset: const Offset(0, 2),
@@ -132,7 +181,7 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
                       children: [
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: () => setState(() => _useGeneralSearch = false),
+                            onPressed: () => _switchMode(false),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: !_useGeneralSearch ? Colors.deepPurple : Colors.grey,
                               foregroundColor: Colors.white,
@@ -143,7 +192,7 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: () => setState(() => _useGeneralSearch = true),
+                            onPressed: () => _switchMode(true),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _useGeneralSearch ? Colors.deepPurple : Colors.grey,
                               foregroundColor: Colors.white,
@@ -222,7 +271,7 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
                               icon: const Icon(Icons.calendar_today),
                               label: Text(
                                 _fromDate != null 
-                                  ? 'Từ: ${_fromDate!.toString().substring(0, 10)}'
+                                  ? 'Từ: ${_formatDateOnly(_fromDate!)}'
                                   : 'Từ ngày'
                               ),
                               style: ElevatedButton.styleFrom(
@@ -248,7 +297,7 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
                               icon: const Icon(Icons.calendar_today),
                               label: Text(
                                 _toDate != null 
-                                  ? 'Đến: ${_toDate!.toString().substring(0, 10)}'
+                                  ? 'Đến: ${_formatDateOnly(_toDate!)}'
                                   : 'Đến ngày'
                               ),
                               style: ElevatedButton.styleFrom(
@@ -352,10 +401,26 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Khách hàng: ${order.customerName}'),
-                              Text('Người tạo: ${order.createdBy}'),
-                              Text('Ngày tạo: ${order.createdAt.toString().substring(0, 16)}'),
-                              Text('Số lượng device: ${order.deviceCount}'),
+                              CopyableText(
+                                text: 'Khách hàng: ${order.customerName}',
+                                style: const TextStyle(fontSize: 14),
+                                copyMessage: 'Đã copy tên khách hàng',
+                              ),
+                              CopyableText(
+                                text: 'Người tạo: ${order.createdBy}',
+                                style: const TextStyle(fontSize: 14),
+                                copyMessage: 'Đã copy người tạo',
+                              ),
+                              CopyableText(
+                                text: 'Ngày tạo: ${_formatDateTime(order.createdAt)}',
+                                style: const TextStyle(fontSize: 14),
+                                copyMessage: 'Đã copy ngày tạo',
+                              ),
+                              CopyableText(
+                                text: 'Số lượng device: ${order.deviceCount}',
+                                style: const TextStyle(fontSize: 14),
+                                copyMessage: 'Đã copy số lượng thiết bị',
+                              ),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
@@ -393,5 +458,349 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _downloadOrderListPDF() async {
+    if (_searchResults.isEmpty) return;
+
+    try {
+      // Hiển thị loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Đang tạo file PDF...'),
+            ],
+          ),
+        ),
+      );
+
+      final pdfBytes = await _generateOrderListPDFBytes(_searchResults);
+      
+      // Đóng loading dialog
+      Navigator.pop(context);
+
+      final fileName = 'danh_sach_don_hang_${DateTime.now().millisecondsSinceEpoch}.pdf';
+
+      if (kIsWeb) {
+        // ignore: undefined_function
+        savePdfWeb(pdfBytes, fileName);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã tải PDF về máy!'), backgroundColor: Colors.green),
+        );
+        return;
+      }
+
+      // Mobile: lưu vào thư mục Tải xuống/Downloads
+      await MediaStore.ensureInitialized();
+      final storageStatus = await Permission.storage.request();
+      final photosStatus = await Permission.photos.request();
+      if (!storageStatus.isGranted && !photosStatus.isGranted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cần quyền bộ nhớ/ảnh để lưu PDF'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final tempPath = '${tempDir.path}/$fileName';
+      final tempFile = File(tempPath);
+      await tempFile.writeAsBytes(pdfBytes);
+
+      MediaStore.appFolder = 'QR_Generator';
+      final result = await MediaStore().saveFile(
+        tempFilePath: tempPath,
+        dirType: DirType.download,
+        dirName: DirName.download,
+      );
+
+      if (result != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã lưu PDF vào Downloads!'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lỗi khi lưu PDF!'), backgroundColor: Colors.red),
+        );
+      }
+
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+    } catch (e) {
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi khi tải PDF: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _showPdfOptions() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.share),
+                title: const Text('Chia sẻ PDF'),
+                onTap: () => Navigator.pop(context, 'share'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.download),
+                title: const Text('Tải về máy'),
+                onTap: () => Navigator.pop(context, 'download'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (action == 'share') {
+      await _shareOrderListPDF();
+    } else if (action == 'download') {
+      await _downloadOrderListPDF();
+    }
+  }
+
+  Future<void> _shareOrderListPDF() async {
+    if (_searchResults.isEmpty) return;
+
+    try {
+      // Hiển thị loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Đang tạo file PDF...'),
+            ],
+          ),
+        ),
+      );
+
+      final pdfBytes = await _generateOrderListPDFBytes(_searchResults);
+      
+      // Đóng loading dialog
+      Navigator.pop(context);
+
+      // Chia sẻ file PDF
+      if (kIsWeb) {
+        // Trên web: sử dụng XFile.fromData
+        await Share.shareXFiles(
+          [XFile.fromData(pdfBytes, name: 'danh_sach_don_hang_${DateTime.now().millisecondsSinceEpoch}.pdf')],
+          text: 'Danh sách đơn hàng tìm kiếm (${_searchResults.length} đơn hàng)',
+        );
+      } else {
+        // Trên mobile: lưu file tạm rồi chia sẻ
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/danh_sach_don_hang_${DateTime.now().millisecondsSinceEpoch}.pdf');
+        await file.writeAsBytes(pdfBytes);
+        
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Danh sách đơn hàng tìm kiếm (${_searchResults.length} đơn hàng)',
+        );
+      }
+    } catch (e) {
+      // Đóng loading dialog nếu có lỗi
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi tạo PDF: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<Uint8List> _generateOrderListPDFBytes(List<Order> orders) async {
+    // Load font Unicode để hỗ trợ tiếng Việt
+    final fontData = await rootBundle.load('assets/fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf');
+    final ttf = pw.Font.ttf(fontData);
+    
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        theme: pw.ThemeData.withFont(
+          base: ttf,
+          bold: ttf,
+          italic: ttf,
+          boldItalic: ttf,
+        ),
+        build: (context) => _buildOrderListPDFWidgets(orders),
+      ),
+    );
+
+    return await pdf.save();
+  }
+
+  List<pw.Widget> _buildOrderListPDFWidgets(List<Order> orders) {
+    final widgets = <pw.Widget>[];
+    
+    // Header
+    widgets.add(pw.Header(
+      level: 0,
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            'DANH SÁCH ĐƠN HÀNG',
+            style: pw.TextStyle(
+              fontSize: 20,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          pw.Text(
+            'Ngày xuất: ${_formatDateOnly(DateTime.now())}',
+            style: pw.TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+    ));
+
+    // Thống kê
+    widgets.add(pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 20),
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+        children: [
+          pw.Column(
+            children: [
+              pw.Text(
+                orders.length.toString(),
+                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.blue),
+              ),
+              pw.Text('Tổng số đơn hàng', style: pw.TextStyle(fontSize: 10)),
+            ],
+          ),
+          pw.Column(
+            children: [
+              pw.Text(
+                orders.where((o) => o.status == 'pending').length.toString(),
+                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.orange),
+              ),
+              pw.Text('Chờ xử lý', style: pw.TextStyle(fontSize: 10)),
+            ],
+          ),
+          pw.Column(
+            children: [
+              pw.Text(
+                orders.where((o) => o.status == 'completed').length.toString(),
+                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.green),
+              ),
+              pw.Text('Hoàn thành', style: pw.TextStyle(fontSize: 10)),
+            ],
+          ),
+          pw.Column(
+            children: [
+              pw.Text(
+                orders.where((o) => o.status == 'deactivated').length.toString(),
+                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.red),
+              ),
+              pw.Text('Đã hủy', style: pw.TextStyle(fontSize: 10)),
+            ],
+          ),
+        ],
+      ),
+    ));
+
+    // Danh sách đơn hàng
+    for (int i = 0; i < orders.length; i++) {
+      final order = orders[i];
+      
+      widgets.add(pw.Container(
+        margin: const pw.EdgeInsets.only(bottom: 15),
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey300),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'Đơn hàng #${i + 1}',
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: pw.BoxDecoration(
+                    color: _getStatusColor(order.status),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+                  ),
+                  child: pw.Text(
+                    _getStatusText(order.status),
+                    style: pw.TextStyle(color: PdfColors.white, fontSize: 10),
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            pw.Text('Khách hàng: ${order.customerName}', style: pw.TextStyle(fontSize: 12)),
+            pw.Text('Người tạo: ${order.createdBy}', style: pw.TextStyle(fontSize: 12)),
+            pw.Text('Ngày tạo: ${_formatDateTime(order.createdAt)}', style: pw.TextStyle(fontSize: 12)),
+            pw.Text('Số lượng device: ${order.deviceCount}', style: pw.TextStyle(fontSize: 12)),
+          ],
+        ),
+      ));
+    }
+
+    return widgets;
+  }
+
+  String _getStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'Chờ xử lý';
+      case 'completed':
+        return 'Hoàn thành';
+      case 'deactivated':
+        return 'Đã hủy';
+      default:
+        return status;
+    }
+  }
+
+  PdfColor _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return PdfColors.orange;
+      case 'completed':
+        return PdfColors.green;
+      case 'deactivated':
+        return PdfColors.red;
+      default:
+        return PdfColors.grey;
+    }
   }
 } 

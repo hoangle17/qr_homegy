@@ -26,9 +26,10 @@ class Order {
   factory Order.fromJson(Map<String, dynamic> json) {
     List<Device> devices = [];
     
-    // Nếu có deviceInventories (từ getOrderDetail)
+    // Nếu có deviceInventories (từ getOrderDetail response mới)
     if (json['deviceInventories'] != null) {
-      devices = (json['deviceInventories'] as List<dynamic>)
+      final deviceInventories = json['deviceInventories'] as List<dynamic>;
+      devices = deviceInventories
           .map((e) => Device.fromJson(e))
           .toList();
     }
@@ -44,7 +45,7 @@ class Order {
       customerId: json['customer_id'] ?? json['customerId'] ?? '',
       customerName: json['customerName'] ?? json['customer_id'] ?? '', // Fallback to customer_id if customerName not available
       createdBy: json['created_by'] ?? json['createdBy'] ?? '',
-      createdAt: DateTime.tryParse(json['created_at'] ?? json['createdAt'] ?? '') ?? DateTime.now(),
+      createdAt: _parseDateTime(json['created_at'] ?? json['createdAt'] ?? ''),
       status: json['status'] ?? 'pending',
       note: json['note'] ?? json['orderInfo'],
       devices: devices,
@@ -95,6 +96,52 @@ class Order {
       devices: devices ?? this.devices,
       deviceCount: deviceCount ?? this.deviceCount,
     );
+  }
+
+  // Helper method to parse DateTime with timezone support
+  static DateTime _parseDateTime(String dateString) {
+    try {
+      // Handle ISO 8601 format with timezone offset (+07:00)
+      if (dateString.contains('+') || (dateString.contains('-') && dateString.split('-').length > 3)) {
+        // Extract timezone offset
+        String timezoneOffset = '';
+        if (dateString.contains('+')) {
+          timezoneOffset = dateString.split('+')[1];
+          dateString = dateString.split('+')[0];
+        } else if (dateString.contains('-') && dateString.split('-').length > 3) {
+          final parts = dateString.split('-');
+          timezoneOffset = parts.last;
+          dateString = parts.take(parts.length - 1).join('-');
+        }
+        
+        // Parse the datetime without timezone - this gives us the local time as intended
+        final parsed = DateTime.tryParse(dateString);
+        if (parsed != null) {
+          return parsed; // Return the local time as is
+        }
+      }
+      
+      // Handle UTC format (ending with Z)
+      if (dateString.endsWith('Z')) {
+        final utcString = dateString.substring(0, dateString.length - 1);
+        final parsed = DateTime.tryParse(utcString);
+        if (parsed != null) {
+          // Convert UTC to local time (UTC+7 for Vietnam)
+          final localTime = parsed.add(const Duration(hours: 7));
+          return localTime;
+        }
+      }
+      
+      // Fallback: try to parse without timezone
+      final parsed = DateTime.tryParse(dateString);
+      if (parsed != null) {
+        return parsed;
+      }
+      
+      return DateTime.now();
+    } catch (e) {
+      return DateTime.now();
+    }
   }
 }
 

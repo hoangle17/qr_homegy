@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../auth/change_password_screen.dart';
 import '../../services/api_service.dart';
+import '../../widgets/copyable_text.dart';
+import 'distributor_list_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -67,12 +69,32 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
+  void _openUserManagement() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const DistributorListScreen()),
+    );
+  }
+
   Future<void> _logout() async {
+    // Lấy thông tin email đã lưu trước khi logout
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('saved_email');
+    final rememberMe = prefs.getBool('remember_me') ?? false;
+    
+    String logoutMessage = 'Bạn có chắc chắn muốn đăng xuất?';
+    
+    if (rememberMe && savedEmail != null && savedEmail.isNotEmpty) {
+      logoutMessage = 'Bạn có chắc chắn muốn đăng xuất?\n\n'
+          'Email đã lưu: $savedEmail\n'
+          'Bạn có thể đăng nhập lại nhanh chóng.';
+    }
+    
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xác nhận đăng xuất'),
-        content: const Text('Bạn có chắc chắn muốn đăng xuất?'),
+        content: Text(logoutMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -87,7 +109,7 @@ class _AccountScreenState extends State<AccountScreen> {
     );
     if (confirm != true) return;
     
-    final prefs = await SharedPreferences.getInstance();
+    // Xóa tất cả thông tin đăng nhập
     await prefs.remove('auth_token');
     await prefs.remove('user_email');
     await prefs.remove('user_info');
@@ -150,7 +172,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: _getRoleColor(role ?? '').withOpacity(0.1),
+                        color: _getRoleColor(role ?? '').withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: _getRoleColor(role ?? '')),
                       ),
@@ -236,6 +258,29 @@ class _AccountScreenState extends State<AccountScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
+                    // Chỉ hiển thị nút quản lý tài khoản cho ADMIN và SUB_ADMIN
+                    if (role == 'ADMIN' || role == 'SUB_ADMIN') ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _openUserManagement,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          icon: const Icon(Icons.people, size: 18),
+                          label: const Text(
+                            'Quản lý tài khoản',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -287,14 +332,15 @@ class _AccountScreenState extends State<AccountScreen> {
                     color: Colors.grey,
                     fontWeight: FontWeight.w500,
                   ),
-          ),
+                ),
                 const SizedBox(height: 1),
-                Text(
-                  value,
+                CopyableText(
+                  text: value,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
+                  copyMessage: 'Đã copy $label',
                 ),
               ],
             ),

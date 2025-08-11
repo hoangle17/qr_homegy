@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart' as ml_kit;
 import '../../../models/device.dart';
 import '../../../models/order.dart';
 import '../../../services/api_service.dart';
@@ -27,6 +29,8 @@ class _QRScanScreenState extends State<QRScanScreen> {
   String _scannedData = '';
   Device? _foundDevice;
   Order? _foundOrder;
+  final ImagePicker _picker = ImagePicker();
+  final ml_kit.BarcodeScanner _barcodeScanner = ml_kit.BarcodeScanner();
 
   @override
   void initState() {
@@ -85,7 +89,142 @@ class _QRScanScreenState extends State<QRScanScreen> {
   @override
   void dispose() {
     cameraController.dispose();
+    _barcodeScanner.close();
     super.dispose();
+  }
+
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        await _processImageFromGallery(image);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showErrorDialog('Lỗi khi chọn ảnh: $e');
+      }
+    }
+  }
+
+  Future<void> _processImageFromGallery(XFile imageFile) async {
+    try {
+      setState(() {
+        _isScanning = false;
+      });
+
+      // Hiển thị loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 16),
+              Text('Đang quét mã QR từ ảnh...'),
+            ],
+          ),
+        ),
+      );
+
+      // Đọc ảnh từ file
+      final inputImage = ml_kit.InputImage.fromFilePath(imageFile.path);
+      
+      // Quét mã QR từ ảnh
+      final List<ml_kit.Barcode> barcodes = await _barcodeScanner.processImage(inputImage);
+      
+      // Đóng loading dialog
+      if (mounted) {
+        Navigator.pop(context);
+      }
+      
+      if (barcodes.isNotEmpty) {
+        final data = barcodes.first.rawValue ?? '';
+        if (data.isNotEmpty) {
+          setState(() {
+            _scannedData = data;
+          });
+
+          // Xử lý dữ liệu quét được
+          final qrType = _getQRType(data);
+          
+          switch (qrType) {
+            case QRType.macAddress:
+              await _handleMacAddressQR(data);
+              break;
+            case QRType.orderId:
+              await _handleOrderIdQR(data);
+              break;
+            case QRType.invalid:
+              if (mounted) {
+                _showInvalidQRDialog(data);
+              }
+              break;
+          }
+        } else {
+          if (mounted) {
+            _showNoQRCodeFoundDialog();
+          }
+        }
+      } else {
+        if (mounted) {
+          _showNoQRCodeFoundDialog();
+        }
+      }
+    } catch (e) {
+      // Đóng loading dialog nếu có lỗi
+      if (mounted) {
+        Navigator.pop(context);
+        _showErrorDialog('Lỗi khi xử lý ảnh: $e');
+      }
+    } finally {
+      // Reset scanning state
+      setState(() {
+        _isScanning = true;
+        _scannedData = '';
+        _foundOrder = null;
+      });
+    }
+  }
+
+  void _showNoQRCodeFoundDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.qr_code_2, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Không tìm thấy QR Code'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Không tìm thấy mã QR nào trong ảnh đã chọn.',
+              style: TextStyle(fontSize: 16),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Vui lòng chọn ảnh khác có chứa mã QR rõ ràng.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onDetect(BarcodeCapture capture) async {
@@ -332,7 +471,7 @@ class _QRScanScreenState extends State<QRScanScreen> {
           children: [
             Icon(Icons.qr_code_2, color: Colors.red),
             SizedBox(width: 8),
-            Text('QR Code không hợp lệ'),
+            Text('Thông báo'),
           ],
         ),
         content: Column(
@@ -393,6 +532,14 @@ class _QRScanScreenState extends State<QRScanScreen> {
           title: const Text('Scan QR Code'),
           backgroundColor: Colors.deepPurple,
           foregroundColor: Colors.white,
+          actions: [
+            // Nút tải ảnh lên cho web
+            IconButton(
+              icon: const Icon(Icons.photo_library),
+              onPressed: _pickImageFromGallery,
+              tooltip: 'Tải ảnh lên',
+            ),
+          ],
         ),
         body: Center(
           child: Padding(
@@ -405,9 +552,9 @@ class _QRScanScreenState extends State<QRScanScreen> {
                     size: 60,
                     color: Colors.orange,
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 16),
                 const Text(
-                  'Không hỗ trợ trên nền tảng này',
+                  'Camera không hỗ trợ trên nền tảng này',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -416,7 +563,7 @@ class _QRScanScreenState extends State<QRScanScreen> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Tính năng Scan QR Code chỉ khả dụng trên ứng dụng mobile (Android/iOS).',
+                  'Tính năng Scan QR Code bằng camera chỉ khả dụng trên ứng dụng mobile (Android/iOS).',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
@@ -425,12 +572,23 @@ class _QRScanScreenState extends State<QRScanScreen> {
                 ),
                 const SizedBox(height: 30),
                 const Text(
-                  'Vui lòng sử dụng nút Back hoặc chuyển tab để quay lại',
+                  'Tuy nhiên, bạn có thể sử dụng nút "Tải ảnh lên" để quét mã QR từ ảnh.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey,
-                    fontStyle: FontStyle.italic,
+                    color: Colors.green,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: _pickImageFromGallery,
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text('Tải ảnh lên'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   ),
                 ),
               ],
@@ -446,6 +604,12 @@ class _QRScanScreenState extends State<QRScanScreen> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         actions: [
+          // Nút tải ảnh lên
+          IconButton(
+            icon: const Icon(Icons.photo_library),
+            onPressed: _pickImageFromGallery,
+            tooltip: 'Tải ảnh lên',
+          ),
           IconButton(
             icon: ValueListenableBuilder(
               valueListenable: cameraController.torchState,

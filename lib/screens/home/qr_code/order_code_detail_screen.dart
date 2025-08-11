@@ -1010,6 +1010,10 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
       // Khởi tạo trạng thái mở/đóng mặc định (mở để giữ trải nghiệm cũ)
       _groupExpanded.putIfAbsent(groupName, () => true);
 
+      // Tính toán số lượng thiết bị đã kích hoạt và chưa kích hoạt
+      final activatedCount = devices.where((device) => device.isActive).length;
+      final notActivatedCount = devices.length - activatedCount;
+
       widgets.add(
         Card(
           margin: const EdgeInsets.only(top: 12, bottom: 8),
@@ -1023,13 +1027,50 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
                 });
               },
               leading: const Icon(Icons.category, color: Colors.deepPurple),
-              title: Text(
-                '$groupName (${devices.length} thiết bị)',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.deepPurple,
-                ),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$groupName (${devices.length} thiết bị)',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepPurple,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (notActivatedCount > 0) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '$notActivatedCount chưa kích hoạt',
+                            style: const TextStyle(color: Colors.white, fontSize: 10),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (activatedCount > 0) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '$activatedCount đã kích hoạt',
+                            style: const TextStyle(color: Colors.white, fontSize: 10),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
               children: [
                 ...devices.map((device) => Card(
@@ -1037,7 +1078,10 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
                       child: ListTile(
                         title: CopyableText(
                           text: device.macAddress,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _order!.status == 'completed' ? null : Colors.grey,
+                          ),
                           copyMessage: 'Đã copy MAC Address',
                         ),
                         subtitle: Column(
@@ -1045,13 +1089,19 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
                           children: [
                             CopyableText(
                               text: 'Mã sản phẩm: ${device.skuCode}',
-                              style: const TextStyle(fontSize: 12),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _order!.status == 'completed' ? null : Colors.grey,
+                              ),
                               copyMessage: 'Đã copy SKU Code',
                             ),
                             if (device.skuCatalog?.description != null && device.skuCatalog!.description!.isNotEmpty)
                               Text(
                                 'Mô tả: ${device.skuCatalog!.description}',
-                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                style: TextStyle(
+                                  fontSize: 12, 
+                                  color: _order!.status == 'completed' ? Colors.grey : Colors.grey.withOpacity(0.5),
+                                ),
                               ),
                             const SizedBox(height: 4),
                             Container(
@@ -1067,8 +1117,11 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
                             ),
                           ],
                         ),
-                        trailing: const Icon(Icons.qr_code),
-                        onTap: () {
+                        trailing: Icon(
+                          Icons.qr_code,
+                          color: _order!.status == 'completed' ? null : Colors.grey,
+                        ),
+                        onTap: _order!.status == 'completed' ? () {
                           // Kiểm tra trạng thái đơn hàng và payment status
                           if (_order!.status == 'pending' && device.paymentStatus == 'pending') {
                             // Nếu đơn hàng đang chờ thanh toán và device cũng chờ thanh toán thì không cho phép click
@@ -1092,7 +1145,7 @@ class _OrderCodeDetailScreenState extends State<OrderCodeDetailScreen> {
                               ),
                             ),
                           );
-                        },
+                        } : null,
                       ),
                     )),
                 const SizedBox(height: 8),

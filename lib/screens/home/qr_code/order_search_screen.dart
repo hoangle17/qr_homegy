@@ -72,12 +72,20 @@ class _OrderSearchScreenState extends State<OrderSearchScreen> {
         orders = await ApiService.searchOrders(_queryController.text.trim());
       } else {
         // Sử dụng tìm kiếm chi tiết
+        
+        // Xử lý ngày "Đến" - thêm 1 ngày để bao gồm toàn bộ ngày được chọn
+        // Lý do: API thường lọc theo timestamp, nên cần thêm 1 ngày để bao gồm tất cả dữ liệu trong ngày đó
+        DateTime? adjustedToDate = _toDate;
+        if (_toDate != null) {
+          adjustedToDate = _toDate!.add(const Duration(days: 1));
+        }
+        
         orders = await ApiService.getOrders(
           status: _selectedStatus,
           customerId: _customerIdController.text.trim().isEmpty ? null : _customerIdController.text.trim(),
           createdBy: _createdByController.text.trim().isEmpty ? null : _createdByController.text.trim(),
           fromDate: _fromDate,
-          toDate: _toDate,
+          toDate: adjustedToDate, // Sử dụng ngày đã được điều chỉnh
         );
       }
 

@@ -86,7 +86,7 @@ class Customer {
       case 'DISTRIBUTOR':
         return 'Nhà phân phối';
       case 'CUSTOMER':
-        return 'Khách hàng';
+        return 'Khách lẻ';
       case 'AGENT':
       default:
         return 'Đại lý';

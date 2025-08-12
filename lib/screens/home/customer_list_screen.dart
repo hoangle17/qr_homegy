@@ -17,12 +17,19 @@ class CustomerListScreen extends StatefulWidget {
 class _CustomerListScreenState extends State<CustomerListScreen> {
   String _search = '';
   List<Customer> _customers = [];
+  List<Customer> _filteredCustomers = [];
   bool _isLoading = true;
+  bool _isLoadingList = false; // Thêm biến loading riêng cho list
   String? _error;
+  
+  // Filter variables
+  String? _selectedStatusFilter;
 
   @override
   void initState() {
     super.initState();
+    // No default filter selected - show all customers without highlighting any stat card
+    _selectedStatusFilter = 'all';
     _loadCustomers();
   }
 
@@ -38,6 +45,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         _customers = customers;
         _isLoading = false;
       });
+      _applyFilters(); // Apply current filters after loading
     } catch (e) {
       setState(() {
         _error = 'Lỗi khi tải danh sách khách hàng: $e';
@@ -46,22 +54,35 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     }
   }
 
-  List<Customer> get _filteredCustomers {
+  void _applyFilters() {
     List<Customer> filtered = _customers;
+
+    // Filter by status
+    if (_selectedStatusFilter != null && _selectedStatusFilter != 'all') {
+      switch (_selectedStatusFilter) {
+        case 'active':
+          filtered = filtered.where((customer) => customer.isActive).toList();
+          break;
+        case 'inactive':
+          filtered = filtered.where((customer) => !customer.isActive).toList();
+          break;
+      }
+    }
 
     // Filter by search query
     if (_search.isNotEmpty) {
       final query = _search.toLowerCase();
-      filtered =
-          filtered.where((customer) {
-            return customer.name.toLowerCase().contains(query) ||
-                customer.email.toLowerCase().contains(query) ||
-                (customer.phone?.toLowerCase().contains(query) ?? false) ||
-                (customer.region?.toLowerCase().contains(query) ?? false);
-          }).toList();
+      filtered = filtered.where((customer) {
+        return customer.name.toLowerCase().contains(query) ||
+            customer.email.toLowerCase().contains(query) ||
+            (customer.phone?.toLowerCase().contains(query) ?? false) ||
+            (customer.region?.toLowerCase().contains(query) ?? false);
+      }).toList();
     }
 
-    return filtered;
+    setState(() {
+      _filteredCustomers = filtered;
+    });
   }
 
   void _navigateToAddScreen() async {
@@ -74,6 +95,42 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     if (result == true) {
       _loadCustomers();
     }
+  }
+
+  // Method to handle filter by status
+  void _filterByStatus(String? status) {
+    setState(() {
+      _selectedStatusFilter = status;
+      _isLoadingList = true; // Chỉ loading phần list
+    });
+    
+    // Simulate loading delay for better UX (since this is local filtering)
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        _applyFilters();
+        setState(() {
+          _isLoadingList = false;
+        });
+      }
+    });
+  }
+
+  // Method to clear all filters
+  void _clearFilters() {
+    setState(() {
+      _selectedStatusFilter = null;
+      _isLoadingList = true; // Chỉ loading phần list
+    });
+    
+    // Simulate loading delay for better UX (since this is local filtering)
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        _applyFilters();
+        setState(() {
+          _isLoadingList = false;
+        });
+      }
+    });
   }
 
   Future<void> _confirmDeleteCustomer(Customer customer) async {
@@ -300,27 +357,67 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          child: Column(
             children: [
-              _buildStatCard(
-                'Tổng số',
-                _filteredCustomers.length.toString(),
-                Icons.people,
-                Colors.blue,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatCard(
+                    'Tổng số',
+                    _customers.length.toString(),
+                    Icons.people,
+                    Colors.blue,
+                    'all', // Filter for all (show all customers)
+                  ),
+                  _buildStatCard(
+                    'Hoạt động',
+                    _customers.where((c) => c.isActive).length.toString(),
+                    Icons.check_circle,
+                    Colors.green,
+                    'active',
+                  ),
+                  _buildStatCard(
+                    'Không hoạt động',
+                    _customers.where((c) => !c.isActive).length.toString(),
+                    Icons.cancel,
+                    Colors.red,
+                    'inactive',
+                  ),
+                ],
               ),
-              _buildStatCard(
-                'Hoạt động',
-                _filteredCustomers.where((c) => c.isActive).length.toString(),
-                Icons.check_circle,
-                Colors.green,
-              ),
-              _buildStatCard(
-                'Không hoạt động',
-                _filteredCustomers.where((c) => !c.isActive).length.toString(),
-                Icons.cancel,
-                Colors.red,
-              ),
+              // Filter status display
+              if (_getFilterStatusText().isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.filter_list, color: Colors.deepPurple, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _getFilterStatusText(),
+                          style: const TextStyle(
+                            color: Colors.deepPurple,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.deepPurple, size: 16),
+                        onPressed: _clearFilters,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
@@ -338,10 +435,15 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               setState(() {
                 _search = value;
               });
+              _applyFilters();
             },
           ),
         ),
-        if (_filteredCustomers.isEmpty)
+        if (_isLoadingList)
+          Expanded(
+            child: const Center(child: CircularProgressIndicator()),
+          )
+        else if (_filteredCustomers.isEmpty)
           Expanded(
             child: Center(
               child: Column(
@@ -350,7 +452,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                   Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
                   const SizedBox(height: 16),
                   Text(
-                    _search.isEmpty
+                    _search.isEmpty && _getFilterStatusText().isEmpty
                         ? 'Không có khách hàng nào'
                         : 'Không tìm thấy kết quả',
                     style: TextStyle(color: Colors.grey[600]),
@@ -506,30 +608,56 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     return DateFormat('HH:mm dd/MM/yyyy').format(dateTime);
   }
 
+  String _getFilterStatusText() {
+    switch (_selectedStatusFilter) {
+      case 'active':
+        return 'Đang lọc: Hoạt động';
+      case 'inactive':
+        return 'Đang lọc: Không hoạt động';
+      default:
+        return ''; // Don't show filter status for 'all' or null
+    }
+  }
+
   Widget _buildStatCard(
     String title,
     String value,
     IconData icon,
     Color color,
+    String? filterStatus,
   ) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 32),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+    // Don't show selected state for 'all' filter by default
+    final isSelected = _selectedStatusFilter == filterStatus && filterStatus != 'all';
+    
+    return GestureDetector(
+      onTap: filterStatus != null ? () => _filterByStatus(filterStatus) : null,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: isSelected ? Border.all(color: color, width: 2) : null,
         ),
-        Text(
-          title,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-          textAlign: TextAlign.center,
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

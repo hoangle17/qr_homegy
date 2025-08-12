@@ -19,6 +19,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   List<Device> _devices = [];
   List<Device> _filteredDevices = [];
   bool _isLoading = true;
+  bool _isLoadingList = false; // Thêm biến loading riêng cho list
   String? _error;
 
   // Filter variables
@@ -28,7 +29,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   
   // Pagination & counters from API
   int _page = 1;
-  final int _limit = 20; // As specified
+  final int _limit = 10; // As specified
   int _total = 0;
   int _activeCount = 0;
   int _totalPages = 0;
@@ -64,6 +65,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   @override
   void initState() {
     super.initState();
+    // Set default filter to show all devices
+    _selectedFilter = null; // null means show all
     _loadDevices();
     _scrollController.addListener(_onScroll);
   }
@@ -81,6 +84,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     });
 
     try {
+      // Always get total counts from API without filter for statistics
+      final totalResult = await ApiService.getInventoryDevices(
+        page: 1,
+        limit: 1, // Just need counts, not data
+        fromDate: _fromDate,
+        toDate: _toDate,
+      );
+      
+      // Get filtered data for display
       final bool? activeFilter = _selectedFilter == 'activated'
           ? true
           : (_selectedFilter == 'not_activated' ? false : null);
@@ -94,13 +106,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       final devices = (result['devices'] as List<Device>);
       setState(() {
         _devices = devices;
-        _filteredDevices = devices;
-        _total = (result['total'] as int?) ?? devices.length;
-        _activeCount = (result['activeCount'] as int?) ?? devices.where((d) => d.isActive).length;
+        _total = (totalResult['total'] as int?) ?? 0;
+        _activeCount = (totalResult['activeCount'] as int?) ?? 0;
         _totalPages = (result['totalPages'] as int?) ?? 1;
         _isLoading = false;
         _hasLoggedEndForCurrentPage = false;
       });
+      _filterDevices(); // Apply current filters
       print('[Statistics] Loaded page: $_page/$_totalPages, items on page: ${devices.length}, total: $_total, active: $_activeCount');
     } catch (e) {
       setState(() {
@@ -151,8 +163,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       setState(() {
         _devices.addAll(devices);
         _page = nextPage;
-        _total = (result['total'] as int?) ?? _total;
-        _activeCount = (result['activeCount'] as int?) ?? _activeCount;
         _totalPages = (result['totalPages'] as int?) ?? _totalPages;
         _isLoadingMore = false;
         _hasLoggedEndForCurrentPage = false; // allow logging for new page end
@@ -682,23 +692,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         const SizedBox(height: 8),
         // Danh sách devices
         Expanded(
-          child: _filteredDevices.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.devices_other, color: Colors.grey, size: 64),
-                      const SizedBox(height: 16),
-                      Text(
-                        (_selectedFilter != null || _fromDate != null || _toDate != null)
-                            ? 'Không tìm thấy device nào phù hợp'
-                            : 'Không có device nào',
-                        style: const TextStyle(fontSize: 18, color: Colors.grey),
+          child: _isLoadingList
+              ? const Center(child: CircularProgressIndicator())
+              : _filteredDevices.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.devices_other, color: Colors.grey, size: 64),
+                          const SizedBox(height: 16),
+                          Text(
+                            (_selectedFilter != null || _fromDate != null || _toDate != null)
+                                ? 'Không tìm thấy device nào phù hợp'
+                                : 'Không có device nào',
+                            style: const TextStyle(fontSize: 18, color: Colors.grey),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                )
-              : Scrollbar(
+                    )
+                  : Scrollbar(
                   controller: _scrollController,
                   thumbVisibility: true,
                   thickness: 4,
@@ -833,23 +845,96 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 32),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-          ),
-        Text(
-          title,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
+    String? filterStatus;
+    
+    // Map title to filter status
+    switch (title) {
+      case 'Tổng số':
+        filterStatus = 'all';
+        break;
+      case 'Đã kích hoạt':
+        filterStatus = 'activated';
+        break;
+      case 'Chưa kích hoạt':
+        filterStatus = 'not_activated';
+        break;
+      default:
+        filterStatus = null;
+    }
+    
+    final isSelected = _selectedFilter == filterStatus;
+    
+    return GestureDetector(
+      onTap: filterStatus != null ? () => _filterByStatCard(filterStatus!) : null,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: isSelected ? Border.all(color: color, width: 2) : null,
         ),
-      ],
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  // Method to handle filter by clicking on stat cards
+  void _filterByStatCard(String filterStatus) async {
+    setState(() {
+      _selectedFilter = filterStatus == 'all' ? null : filterStatus;
+      _page = 1; // Reset to first page when applying filters
+      _isLoadingList = true; // Chỉ loading phần list
+    });
+    
+    try {
+      // Get filtered data for display
+      final bool? activeFilter = filterStatus == 'activated'
+          ? true
+          : (filterStatus == 'not_activated' ? false : null);
+      final result = await ApiService.getInventoryDevices(
+        page: 1,
+        limit: _limit,
+        isActive: activeFilter,
+        fromDate: _fromDate,
+        toDate: _toDate,
+      );
+      final devices = (result['devices'] as List<Device>);
+      setState(() {
+        _devices = devices;
+        _totalPages = (result['totalPages'] as int?) ?? 1;
+        _isLoadingList = false;
+        _hasLoggedEndForCurrentPage = false;
+      });
+      _filterDevices(); // Apply current filters
+    } catch (e) {
+      setState(() {
+        _isLoadingList = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi khi lọc thiết bị: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
